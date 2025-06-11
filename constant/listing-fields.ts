@@ -1,0 +1,83 @@
+import { FieldType } from "@/@types/index.types";
+import {
+  CATEGORY_OPTIONS,
+  CONDITION_OPTIONS,
+  MODEL_OPTIONS,
+  TYPE_OPTIONS,
+  PRICE_RANGE_OPTIONS,
+  AVAILABILITY_OPTIONS,
+} from "./item-options";
+
+export const addListingFields: FieldType[] = [
+  {
+    name: "category",
+    fieldType: "select",
+    label: "Category",
+    required: true,
+    disabled: false,
+    options: CATEGORY_OPTIONS,
+  },
+  {
+    name: "type",
+    fieldType: "select",
+    label: "Type",
+    required: false,
+    disabled: false,
+    options: TYPE_OPTIONS,
+  },
+  {
+    name: "model",
+    fieldType: "select",
+    label: "Model",
+    required: false,
+    disabled: false,
+    //options: [],
+  },
+  {
+    name: "condition",
+    fieldType: "select",
+    label: "Condition",
+    required: true,
+    disabled: false,
+    options: CONDITION_OPTIONS,
+  },
+  {
+    name: "price",
+    fieldType: "currency",
+    label: "Price",
+    col: 1,
+    required: true,
+    disabled: false,
+  },
+  {
+    name: "priceRange",
+    fieldType: "select",
+    label: "Price Range (Optional)",
+    required: false,
+    disabled: false,
+    options: PRICE_RANGE_OPTIONS,
+  },
+  {
+    name: "availability",
+    fieldType: "select",
+    label: "Availability",
+    required: true,
+    disabled: false,
+    options: AVAILABILITY_OPTIONS,
+  },
+  {
+    name: "description",
+    fieldType: "textarea",
+    label: "Description",
+    col: 2,
+    required: false,
+    disabled: false,
+  },
+  {
+    name: "ContactPhone",
+    fieldType: "phone",
+    label: "Contact Phone Number",
+    required: true,
+    disabled: false,
+  },
+];
