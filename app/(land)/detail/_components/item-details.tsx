@@ -1,5 +1,6 @@
 import { ListingType } from "@/@types/api.types";
 import ChatSellerButton from "@/components/ChatSellerButton";
+import { CheckoutButton } from "@/components/checkout/CheckoutButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -110,6 +111,11 @@ const ItemDetails = ({
                 shopOwnerUserId={listing?.shop?.userId || ""}
                 ShopName={listing?.shop?.ShopName || ""}
               />
+              <CheckoutButton 
+                    listingId={listing.$id} 
+                    price={listing.price} 
+                    sellerId={listing.shopId} 
+                />
             </div>
           </CardContent>
         </Card>
