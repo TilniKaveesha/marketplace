@@ -14,9 +14,15 @@ export const POST = async (req: NextRequest) => {
     const listing = await databases.getDocument(
       APP_CONFIG.APPWRITE.DATABASE_ID,
       APP_CONFIG.APPWRITE.ITEM_LISTING_ID,
-      APP_CONFIG.APPWRITE.SHOP_ID,
+      //APP_CONFIG.APPWRITE.SHOP_ID,
       listingId
     );
+
+    const shop = await databases.getDocument(
+      APP_CONFIG.APPWRITE.DATABASE_ID,
+      APP_CONFIG.APPWRITE.SHOP_ID,
+      listing.shopId
+      );
 
     // Create order
     const order = await databases.createDocument(
@@ -41,10 +47,10 @@ export const POST = async (req: NextRequest) => {
       APP_CONFIG.APPWRITE.NOTIFICATIONS_COLLECTION_ID,
       ID.unique(),
       {
-        userId: listing.SHOP.userId, // seller ID
+        userId:shop.userId, // seller ID
         type: "order",
         message: `New order for ${listing.displayTitle}`,
-        read: false,
+        read: "false",
         link: `/my-shop/orders/${order.$id}`,
         relatedId: order.$id,
         timestamp: new Date().toISOString()

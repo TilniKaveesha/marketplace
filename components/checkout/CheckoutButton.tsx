@@ -28,6 +28,7 @@ export function CheckoutButton({ listingId, price, sellerId }: { listingId: stri
           userId: user.$id,
           listingId,
           price,
+          paymentMethod:'payway',
           status: 'pending',
           sellerId,
         }),
@@ -52,7 +53,7 @@ export function CheckoutButton({ listingId, price, sellerId }: { listingId: stri
       toast({ title: "Success", description: "Order placed successfully!" });
 
       // Redirect to Payway payment URL or to success page
-      router.push(paymentUrl); // or `/orders/success/${order.$id}`
+      router.push(`/orders`); // or `/orders/success/${order.$id}`
     } catch (error) {
       toast({ title: "Error", description: "Failed to place order", variant: "destructive" });
     } finally {
