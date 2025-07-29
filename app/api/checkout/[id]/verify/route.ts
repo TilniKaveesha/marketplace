@@ -1,33 +1,63 @@
+import { APP_CONFIG } from "@/lib/app-config"
+import { createSessionClient } from "@/lib/appwrite"
+import { type NextRequest, NextResponse } from "next/server"
 
-import { createSessionClient } from '@/lib/appwrite';
-import { NextResponse } from 'next/server';
+export const dynamic = "force-dynamic"
 
-export async function POST(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
-  const { databases } = await createSessionClient();
-  
+export const POST = async (req: NextRequest, { params }: { params: { id: string } }) => {
   try {
-    // 1. Update order status (your existing logic)
-    await databases.updateDocument(
-      process.env.APPWRITE_DATABASE_ID!,
-      process.env.APPWRITE_ORDERS_COLLECTION_ID!,
-      params.id,
-      { 
-        status: 'paid',
-        paidAt: new Date().toISOString() 
-      }
-    );
+    const { databases } = await createSessionClient()
+    const { transactionId } = await req.json()
+    const orderId = params.id
 
-    // 2. Your existing notification code remains unchanged
-    // ...
+    // Update order status to paid
+    const updatedOrder = await databases.updateDocument(
+      APP_CONFIG.APPWRITE.DATABASE_ID,
+      APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
+      orderId,
+      {
+        status: "paid",
+        transactionId,
+        paidAt: new Date().toISOString(),
+      },
+    )
 
-    return NextResponse.json({ success: true });
-  } catch (error) {
+    // Get order details for notification
+    const order = await databases.getDocument(
+      APP_CONFIG.APPWRITE.DATABASE_ID,
+      APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
+      orderId,
+    )
+
+    // Create notification for buyer
+    await databases.createDocument(
+      APP_CONFIG.APPWRITE.DATABASE_ID,
+      APP_CONFIG.APPWRITE.NOTIFICATIONS_COLLECTION_ID,
+      "unique()",
+      {
+        userId: order.userId,
+        type: "payment",
+        message: `Payment confirmed for ${order.listingTitle}`,
+        read: "false",
+        link: `/orders/success/${orderId}`,
+        relatedId: orderId,
+        timestamp: new Date().toISOString(),
+      },
+    )
+
+    return NextResponse.json({
+      message: "Payment verified successfully",
+      order: updatedOrder,
+    })
+  } catch (error: any) {
+    console.log("Payment verification error:", error)
     return NextResponse.json(
-      { error: 'Failed to verify payment' },
-      { status: 500 }
-    );
+      {
+        message: error.message || "Failed to verify payment",
+      },
+      {
+        status: 500,
+      },
+    )
   }
 }

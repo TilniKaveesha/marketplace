@@ -1,233 +1,221 @@
-"use client";
+"use client"
 
-import React, { useCallback, useState } from "react";
-import Link from "next/link";
-import { Plus, Search, Menu, X, Loader, MessageSquareText } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import Logo from "./logo";
-import { Input } from "./ui/input";
-import { Separator } from "./ui/separator";
-import { Button } from "./ui/button";
+import type React from "react"
+import { useCallback, useState } from "react"
+import Link from "next/link"
+import { Plus, Search, Menu, X, Loader, MessageSquareText, Bell } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
+import Logo from "./logo"
+import { Input } from "./ui/input"
+import { Button } from "./ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
-import useRegisterDialog from "@/hooks/use-register.dialog";
-import useLoginDialog from "@/hooks/use-login.dialog";
-import useCurrentUser from "@/hooks/api/use-current-user";
-import { usePathname, useRouter } from "next/navigation";
-import { Avatar, AvatarFallback } from "./ui/avatar";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { logoutMutationFn } from "@/lib/fetcher";
-import { toast } from "@/hooks/use-toast";
+} from "./ui/dropdown-menu"
+import useRegisterDialog from "@/hooks/use-register.dialog"
+import useLoginDialog from "@/hooks/use-login.dialog"
+import useCurrentUser from "@/hooks/api/use-current-user"
+import { usePathname, useRouter } from "next/navigation"
+import { Avatar, AvatarFallback } from "./ui/avatar"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { logoutMutationFn } from "@/lib/fetcher"
+import { toast } from "@/hooks/use-toast"
 
 const Navbar = () => {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { onOpen: onRegisterOpen } = useRegisterDialog();
-  const { onOpen: onLoginOpen } = useLoginDialog();
-  const [searchKeyword, setSearchKeyword] = useState("");
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const router = useRouter()
+  const pathname = usePathname()
+  const { onOpen: onRegisterOpen } = useRegisterDialog()
+  const { onOpen: onLoginOpen } = useLoginDialog()
+  const [searchKeyword, setSearchKeyword] = useState("")
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
-  const { data: userData, isPending: isLoading } = useCurrentUser();
-  const user = userData?.user;
-  const hideSearchPathname = ["/", "/my-shop/add-listing", "/profile-messages"];
-  const hideNavPath = ["/my-shop", "/my-shop/add-listing", "/profile-messages"];
-  const queryClient = useQueryClient();
+  const { data: userData, isPending: isLoading } = useCurrentUser()
+  const user = userData?.user
+  const queryClient = useQueryClient()
 
   const { mutate, isPending } = useMutation({
     mutationFn: logoutMutationFn,
     onSuccess: () => {
-      queryClient.setQueryData(["currentUser"], null);
+      queryClient.setQueryData(["currentUser"], null)
       queryClient.invalidateQueries({
         queryKey: ["currentUser"],
-      });
-      router.push("/");
+      })
+      router.push("/")
     },
     onError: () => {
       toast({
         title: "Logout Failed",
         description: "Please try again.",
-      });
+      })
     },
-  });
+  })
 
   const handleSell = () => {
     if (!user) {
-      onLoginOpen();
-      return;
+      onLoginOpen()
+      return
     }
-    router.push("/my-shop/add-listing"); // Fixed typo in path
-  };
+    router.push("/my-shop/add-listing")
+  }
 
   const handleLogout = useCallback(() => {
-    mutate();
-  }, [mutate]);
+    mutate()
+  }, [mutate])
 
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    console.log("Searching for:", searchKeyword);
-    // Route to search page or call API here
-  };
+    e.preventDefault()
+    if (searchKeyword.trim()) {
+      router.push(`/search?keyword=${encodeURIComponent(searchKeyword.trim())}`)
+    }
+  }
 
   const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen);
-  };
+    setIsMobileMenuOpen(!isMobileMenuOpen)
+  }
 
-  // Animation variants for mobile menu
   const mobileMenuVariants = {
     hidden: { opacity: 0, y: -20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
     exit: { opacity: 0, y: -20, transition: { duration: 0.2 } },
-  };
+  }
 
   return (
-    <header
-      className="sticky top-0 z-50 w-full bg-gray-100 px-4 md:px-6 h-16 backdrop-blur-sm"
-      style={{ boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)" }}
-    >
+    <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md px-4 md:px-6 h-20 border-b border-gray-200/50">
       <nav className="flex items-center justify-between h-full max-w-7xl mx-auto">
         {/* Logo */}
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5 }}
-        >
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
           <Logo />
         </motion.div>
 
-        {/* Navigation and Search */}
-        <div className="hidden lg:flex items-center justify-center flex-1 mx-9 space-x-6 text-black">
+        {/* Desktop Navigation */}
+        <div className="hidden lg:flex items-center justify-center flex-1 mx-12 space-x-8">
           <motion.form
             onSubmit={handleSearch}
-            className="w-full max-w-[320px]"
+            className="w-full max-w-md"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
           >
-            <div className="relative flex h-10 items-center bg-white/90 rounded-lg px-3 transition-all duration-300 focus-within:ring-2 focus-within:ring-primary text-black">
+            <div className="relative flex h-12 items-center bg-gray-50 rounded-xl px-4 transition-all duration-300 focus-within:ring-2 focus-within:ring-primary/20 focus-within:bg-white focus-within:shadow-lg">
+              <Search className="w-5 h-5 text-gray-400 mr-3" />
               <Input
                 type="search"
                 name="keyword"
                 autoComplete="off"
-                placeholder="Search products..."
-                className="flex-1 border-none outline-none focus:ring-0 shadow-none text-black placeholder-black"
+                placeholder="Search amazing products..."
+                className="flex-1 border-none outline-none focus:ring-0 shadow-none bg-transparent text-gray-700 placeholder-gray-400"
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
                 aria-label="Search products"
               />
-              <button type="submit" aria-label="Submit search">
-                <Search className="w-5 h-5 text-gray-600 hover:text-primary transition-colors" />
-              </button>
+              {searchKeyword && (
+                <Button type="submit" size="sm" className="ml-2 h-8 px-3 bg-primary hover:bg-primary/90">
+                  Search
+                </Button>
+              )}
             </div>
           </motion.form>
 
-          <ul className="flex items-center space-x-6">
-            <motion.li
+          <nav className="flex items-center space-x-6">
+            <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.3 }}
             >
-              <Link href="/" className="text-sm font-medium hover:text-primary transition-colors">
+              <Link href="/" className="text-sm font-medium text-gray-700 hover:text-primary transition-colors">
                 Home
               </Link>
-            </motion.li>
-            <motion.li
+            </motion.div>
+            <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.4 }}
             >
-              <DropdownMenu>
-                <DropdownMenuTrigger className="text-sm font-medium hover:text-primary transition-colors">
-                  Categories & Services
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="bg-white text-black rounded-lg shadow-lg">
-                  <DropdownMenuItem asChild>
-                    <Link href="/categories/electronics" className="block px-4 py-2 hover:bg-gray-500">
-                      Electronics
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/categories/clothing" className="block px-4 py-2 hover:bg-gray-500">
-                      Clothing
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/categories/services" className="block px-4 py-2 hover:bg-gray-500">
-                      Services
-                    </Link>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </motion.li>
-            <motion.li
+              <Link href="/search" className="text-sm font-medium text-gray-700 hover:text-primary transition-colors">
+                Browse
+              </Link>
+            </motion.div>
+            <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.5 }}
             >
-              <Link href="/pricing" className="text-sm font-medium hover:text-primary transition-colors">
-                Pricing
+              <Link href="/about" className="text-sm font-medium text-gray-700 hover:text-primary transition-colors">
+                About
               </Link>
-            </motion.li>
-          </ul>
+            </motion.div>
+          </nav>
         </div>
 
         {/* Desktop Actions */}
         <div className="hidden lg:flex items-center space-x-4">
           {isLoading || isPending ? (
-            <Loader className="w-5 h-5 animate-spin text-white" />
+            <Loader className="w-5 h-5 animate-spin text-gray-500" />
           ) : user ? (
-            <>
-              <Button onClick={() => router.push("/profile-messages")} size="icon" className="rounded-full shadow-md !py-0 !bg-white !text-black">
-                <MessageSquareText />
+            <div className="flex items-center space-x-3">
+              <Button
+                onClick={() => router.push("/profile-messages")}
+                variant="ghost"
+                size="icon"
+                className="relative hover:bg-gray-100 rounded-full"
+              >
+                <MessageSquareText className="w-5 h-5" />
               </Button>
+
+              <Button variant="ghost" size="icon" className="relative hover:bg-gray-100 rounded-full">
+                <Bell className="w-5 h-5" />
+              </Button>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Avatar role="button" className="h-9 w-9 shadow-sm">
-                    <AvatarFallback className="text-sm uppercase">
-                      {user?.name.charAt(0)}
-                      {user?.name.charAt(1)}
+                  <Avatar className="h-10 w-10 cursor-pointer ring-2 ring-primary/20 hover:ring-primary/40 transition-all">
+                    <AvatarFallback className="text-sm font-semibold bg-gradient-to-br from-primary to-purple-600 text-white">
+                      {user?.name.charAt(0).toUpperCase()}
+                      {user?.name.split(" ")[1]?.charAt(0).toUpperCase() || user?.name.charAt(1).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" forceMount>
-                  <DropdownMenuItem
-                    onClick={() => router.push("/my-shop")}
-                    className="!cursor-pointer"
-                  >
+                <DropdownMenuContent className="w-56 mt-2" align="end" forceMount>
+                  <div className="px-3 py-2 border-b">
+                    <p className="text-sm font-medium">{user?.name}</p>
+                    <p className="text-xs text-gray-500">{user?.email}</p>
+                  </div>
+                  <DropdownMenuItem onClick={() => router.push("/my-shop")} className="cursor-pointer">
                     My Shop
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push("/orders")} className="cursor-pointer">
+                    My Orders
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={handleLogout}
-                    disabled={isPending}
-                    className="!cursor-pointer"
-                  >
+                  <DropdownMenuItem onClick={handleLogout} disabled={isPending} className="cursor-pointer text-red-600">
                     Log out
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            </>
+            </div>
           ) : (
             <motion.div
-              className="flex items-center space-x-2 text-black"
+              className="flex items-center space-x-3"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.6 }}
             >
-              <button className="text-sm font-light hover:text-primary transition-colors" onClick={onLoginOpen}>
-                Sign In
-              </button>
-              <Separator orientation="vertical" className="h-3 bg-white/50" />
-              <button
-                onClick={onRegisterOpen}
-                className="text-sm font-light hover:text-primary transition-colors"
+              <Button
+                variant="ghost"
+                onClick={onLoginOpen}
+                className="text-gray-700 hover:text-primary hover:bg-gray-50"
               >
-                Register
-              </button>
+                Sign In
+              </Button>
+              <Button
+                onClick={onRegisterOpen}
+                className="bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 text-white shadow-lg hover:shadow-xl transition-all"
+              >
+                Get Started
+              </Button>
             </motion.div>
           )}
 
@@ -237,12 +225,12 @@ const Navbar = () => {
             transition={{ duration: 0.5, delay: 0.7 }}
           >
             <Button
-              size="default"
-              className="bg-primary hover:bg-primary/90 text-gray-900 font-semibold px-5 h-10"
+              size="lg"
+              className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold px-6 h-12 shadow-lg hover:shadow-xl transition-all"
               onClick={handleSell}
             >
-              <Plus className="mr-1 w-4 h-4" />
-              Sell a Product
+              <Plus className="mr-2 w-5 h-5" />
+              Sell Now
             </Button>
           </motion.div>
         </div>
@@ -253,9 +241,10 @@ const Navbar = () => {
             variant="ghost"
             size="icon"
             onClick={toggleMobileMenu}
+            className="hover:bg-gray-100"
             aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
           >
-            {isMobileMenuOpen ? <X className="w-6 h-6 text-black" /> : <Menu className="w-6 h-6 text-black" />}
+            {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </Button>
         </div>
       </nav>
@@ -264,154 +253,112 @@ const Navbar = () => {
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div
-            className="lg:hidden bg-white/95 backdrop-blur-sm border-t border-white/20"
+            className="lg:hidden bg-white/95 backdrop-blur-md border-t border-gray-200/50"
             variants={mobileMenuVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
           >
-            <div className="max-w-7xl mx-auto px-4 py-4">
-              <form onSubmit={handleSearch} className="mb-4">
-                <div className="relative flex h-10 items-center bg-white/90 rounded-lg px-3">
+            <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+              <form onSubmit={handleSearch}>
+                <div className="relative flex h-12 items-center bg-gray-50 rounded-xl px-4">
+                  <Search className="w-5 h-5 text-gray-400 mr-3" />
                   <Input
                     type="search"
                     name="keyword"
                     autoComplete="off"
                     placeholder="Search products..."
-                    className="flex-1 border-none outline-none focus:ring-0 shadow-none text-black placeholder-gray-900"
+                    className="flex-1 border-none outline-none focus:ring-0 shadow-none bg-transparent"
                     value={searchKeyword}
                     onChange={(e) => setSearchKeyword(e.target.value)}
                     aria-label="Search products"
                   />
-                  <button type="submit" aria-label="Submit search">
-                    <Search className="w-5 h-5 text-gray-900 hover:text-primary" />
-                  </button>
                 </div>
               </form>
-              <ul className="flex flex-col space-y-4 text-black/95">
-                <li>
-                  <Link
-                    href="/"
-                    className="text-sm font-medium hover:text-primary"
-                    onClick={toggleMobileMenu}
-                  >
-                    Home
-                  </Link>
-                </li>
-                <li>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger className="text-sm font-medium hover:text-primary">
-                      Categories & Services
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="bg-white text-black rounded-lg shadow-lg">
-                      <DropdownMenuItem asChild>
-                        <Link
-                          href="/categories/electronics"
-                          className="block px-4 py-2 hover:bg-gray-500"
-                          onClick={toggleMobileMenu}
-                        >
-                          Electronics
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link
-                          href="/categories/clothing"
-                          className="block px-4 py-2 hover:bg-gray-500"
-                          onClick={toggleMobileMenu}
-                        >
-                          Clothing
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link
-                          href="/categories/services"
-                          className="block px-4 py-2 hover:bg-gray-500"
-                          onClick={toggleMobileMenu}
-                        >
-                          Services
-                        </Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </li>
-                <li>
-                  <Link
-                    href="/pricing"
-                    className="text-sm font-medium hover:text-primary"
-                    onClick={toggleMobileMenu}
-                  >
-                    Pricing
-                  </Link>
-                </li>
+
+              <nav className="space-y-4">
+                <Link
+                  href="/"
+                  className="block text-lg font-medium text-gray-700 hover:text-primary"
+                  onClick={toggleMobileMenu}
+                >
+                  Home
+                </Link>
+                <Link
+                  href="/search"
+                  className="block text-lg font-medium text-gray-700 hover:text-primary"
+                  onClick={toggleMobileMenu}
+                >
+                  Browse
+                </Link>
                 {user ? (
                   <>
-                    <li>
-                      <Link
-                        href="/my-shop"
-                        className="text-sm font-medium hover:text-primary"
-                        onClick={toggleMobileMenu}
-                      >
-                        My Shop
-                      </Link>
-                    </li>
-                    <li>
-                      <button
-                        className="text-sm font-medium hover:text-primary"
-                        onClick={() => {
-                          handleLogout();
-                          toggleMobileMenu();
-                        }}
-                      >
-                        Logout
-                      </button>
-                    </li>
+                    <Link
+                      href="/my-shop"
+                      className="block text-lg font-medium text-gray-700 hover:text-primary"
+                      onClick={toggleMobileMenu}
+                    >
+                      My Shop
+                    </Link>
+                    <Link
+                      href="/profile-messages"
+                      className="block text-lg font-medium text-gray-700 hover:text-primary"
+                      onClick={toggleMobileMenu}
+                    >
+                      Messages
+                    </Link>
+                    <button
+                      className="block text-lg font-medium text-red-600 hover:text-red-700"
+                      onClick={() => {
+                        handleLogout()
+                        toggleMobileMenu()
+                      }}
+                    >
+                      Logout
+                    </button>
                   </>
                 ) : (
-                  <>
-                    <li>
-                      <button
-                        className="text-sm font-light hover:text-primary"
-                        onClick={() => {
-                          onLoginOpen();
-                          toggleMobileMenu();
-                        }}
-                      >
-                        Sign In
-                      </button>
-                    </li>
-                    <li>
-                      <button
-                        className="text-sm font-light hover:text-primary"
-                        onClick={() => {
-                          onRegisterOpen();
-                          toggleMobileMenu();
-                        }}
-                      >
-                        Register
-                      </button>
-                    </li>
-                  </>
+                  <div className="space-y-3">
+                    <Button
+                      variant="outline"
+                      className="w-full bg-transparent"
+                      onClick={() => {
+                        onLoginOpen()
+                        toggleMobileMenu()
+                      }}
+                    >
+                      Sign In
+                    </Button>
+                    <Button
+                      className="w-full bg-gradient-to-r from-primary to-purple-600"
+                      onClick={() => {
+                        onRegisterOpen()
+                        toggleMobileMenu()
+                      }}
+                    >
+                      Get Started
+                    </Button>
+                  </div>
                 )}
-                <li>
-                  <Button
-                    size="default"
-                    className="w-full bg-primary hover:bg-primary/90 text-black/95 font-semibold px-5 h-10"
-                    onClick={() => {
-                      handleSell();
-                      toggleMobileMenu();
-                    }}
-                  >
-                    <Plus className="mr-1 w-4 h-4" />
-                    Sell a Product
-                  </Button>
-                </li>
-              </ul>
+              </nav>
+
+              <Button
+                size="lg"
+                className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-semibold py-3"
+                onClick={() => {
+                  handleSell()
+                  toggleMobileMenu()
+                }}
+              >
+                <Plus className="mr-2 w-5 h-5" />
+                Sell Now
+              </Button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
     </header>
-  );
-};
+  )
+}
 
-export default Navbar;
+export default Navbar

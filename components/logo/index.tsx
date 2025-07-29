@@ -1,22 +1,23 @@
-import { CarFrontIcon, Dot, Smile } from 'lucide-react';
-import Link from 'next/link';
-import React from 'react'
+import { Sparkles } from "lucide-react"
+import Link from "next/link"
 
 const Logo = () => {
   return (
-    <Link href="/" className="flex items-center gap-2">
-  <div className="relative size-7 bg-black rounded-full flex items-center justify-center">
-    <Smile className="w-5 h-5 text-primary" />
-    <span className="absolute -bottom-3 -right-2 text-gray-700">
-      <Dot />
-    </span>
-  </div>
-  <span className="font-semibold text-base  text-black/95">
-    Community Shop
-  </span>
-</Link>
-
+    <Link href="/" className="flex items-center gap-3 group">
+      <div className="relative">
+        <div className="size-10 bg-gradient-to-br from-primary to-purple-600 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105">
+          <Sparkles className="w-6 h-6 text-white" />
+        </div>
+        <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full animate-pulse" />
+      </div>
+      <div className="flex flex-col">
+        <span className="font-bold text-xl bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+          Community
+        </span>
+        <span className="text-sm text-primary font-medium -mt-1">Shop</span>
+      </div>
+    </Link>
   )
 }
 
-export default Logo;
+export default Logo
