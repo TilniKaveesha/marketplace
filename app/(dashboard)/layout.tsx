@@ -1,4 +1,5 @@
-import NavBar from "@/components/Navbar";
+
+import Navbar from "@/components/Navbar";
 import { getLoggedInUser } from "@/lib/appwrite";
 import { redirect } from "next/navigation";
 
@@ -12,7 +13,7 @@ export default async function DashboardLayout({
   return (
     <div className="w-full">
       <div className="flex flex-col w-full h-auto">
-        <NavBar />
+        <Navbar/>
         <main>{children}</main>
       </div>
     </div>

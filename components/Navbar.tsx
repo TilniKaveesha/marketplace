@@ -3,11 +3,12 @@
 import type React from "react"
 import { useCallback, useState } from "react"
 import Link from "next/link"
-import { Plus, Search, Menu, X, Loader, MessageSquareText, Bell } from "lucide-react"
+import { Plus, Search, Menu, X, Loader, MessageSquareText, Bell, Settings } from 'lucide-react'
 import { motion, AnimatePresence } from "framer-motion"
 import Logo from "./logo"
 import { Input } from "./ui/input"
 import { Button } from "./ui/button"
+import { Badge } from "./ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -75,6 +76,8 @@ const Navbar = () => {
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen)
   }
+
+  const isAdmin = user && (user.email === 'test2@gmail.com' || user.labels?.includes('admin'))
 
   const mobileMenuVariants = {
     hidden: { opacity: 0, y: -20 },
@@ -168,6 +171,21 @@ const Navbar = () => {
               <Button variant="ghost" size="icon" className="relative hover:bg-gray-100 rounded-full">
                 <Bell className="w-5 h-5" />
               </Button>
+
+              {isAdmin && (
+                <Button
+                  onClick={() => router.push("/admin")}
+                  variant="outline"
+                  size="sm"
+                  className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Admin Panel
+                  <Badge variant="secondary" className="ml-2">
+                    Admin
+                  </Badge>
+                </Button>
+              )}
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -307,6 +325,18 @@ const Navbar = () => {
                     >
                       Messages
                     </Link>
+                    {isAdmin && (
+                      <Link
+                        href="/admin"
+                        className="block text-lg font-medium text-purple-700 hover:text-purple-800"
+                        onClick={toggleMobileMenu}
+                      >
+                        Admin Panel
+                        <Badge variant="secondary" className="ml-2">
+                          Admin
+                        </Badge>
+                      </Link>
+                    )}
                     <button
                       className="block text-lg font-medium text-red-600 hover:text-red-700"
                       onClick={() => {
