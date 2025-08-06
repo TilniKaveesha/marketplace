@@ -1,109 +1,139 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createAnonymousClient } from "@/lib/appwrite"
+import { createAdminClient } from "@/lib/appwrite"
 import { APP_CONFIG } from "@/lib/app-config"
-import { verifyCallbackHash } from "@/lib/aba-payway-utils"
 import { ID } from "node-appwrite"
+import { verifyCallbackHash, decodeBase64, type ABACallbackData } from "@/lib/aba-payway-utils"
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    console.log("ABA PayWay callback received:", body)
+    console.log("🔔 ABA Callback received:", body)
 
-    const { hash, payment_status, transaction_id, order_id, amount, currency } = body
+    const callbackData: ABACallbackData = body
 
-    // Verify hash
-    const dataString = JSON.stringify({
-      payment_status,
-      transaction_id,
-      order_id,
-      amount,
-      currency,
-    })
-
-    if (!verifyCallbackHash(dataString, hash)) {
-      console.error("Hash verification failed")
+    // Verify the callback hash for security
+    if (!verifyCallbackHash(callbackData)) {
+      console.error("❌ Invalid callback hash")
       return NextResponse.json({ error: "Invalid hash" }, { status: 400 })
     }
 
-    console.log("Hash verification successful")
+    const { databases } = await createAdminClient()
 
-    // Use anonymous client for webhook processing
-    const { databases } = createAnonymousClient()
+    // Extract transaction ID
+    const transactionId = callbackData.tran_id
 
-    // Find order by transaction ID
-    const orders = await databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID, [
-      `transactionId=${transaction_id}`,
-    ])
-
-    if (orders.documents.length === 0) {
-      console.error("Order not found for transaction:", transaction_id)
-      return NextResponse.json({ error: "Order not found" }, { status: 404 })
+    if (!transactionId) {
+      console.error("❌ No transaction ID in callback")
+      return NextResponse.json({ error: "Missing transaction ID" }, { status: 400 })
     }
 
-    const order = orders.documents[0]
-    console.log("Found order:", order.$id)
-
-    // Update order status based on payment status
-    const updateData: any = {
-      paymentStatus: payment_status === "success" ? "paid" : "failed",
-      updatedAt: new Date().toISOString(),
+    // Get the transaction from database
+    let transaction
+    try {
+      transaction = await databases.getDocument(
+        APP_CONFIG.APPWRITE.DATABASE_ID,
+        APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
+        transactionId,
+      )
+    } catch (error: any) {
+      console.error("❌ Transaction not found:", transactionId)
+      return NextResponse.json({ error: "Transaction not found" }, { status: 404 })
     }
 
-    if (payment_status === "success") {
-      updateData.status = "confirmed"
-      updateData.paidAt = new Date().toISOString()
+    // Determine payment status based on ABA callback
+    let paymentStatus = "pending"
+    let orderStatus = "pending"
+
+    if (callbackData.status === "0" || callbackData.status === "success") {
+      paymentStatus = "completed"
+      orderStatus = "confirmed"
+    } else {
+      paymentStatus = "failed"
+      orderStatus = "cancelled"
     }
 
-    const updatedOrder = await databases.updateDocument(
+    console.log("💳 Updating payment status:", {
+      transactionId,
+      paymentStatus,
+      orderStatus,
+      amount: callbackData.amount,
+    })
+
+    // Update transaction in database
+    const updatedTransaction = await databases.updateDocument(
       APP_CONFIG.APPWRITE.DATABASE_ID,
       APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
-      order.$id,
-      updateData,
+      transactionId,
+      {
+        paymentStatus,
+        status: orderStatus,
+        paidAt: paymentStatus === "completed" ? new Date().toISOString() : null,
+        updatedAt: new Date().toISOString(),
+        abaCallbackData: JSON.stringify(callbackData),
+      },
     )
 
-    console.log("Order updated successfully:", updatedOrder.$id)
+    console.log("✅ Transaction updated successfully")
 
-    // Create notification for buyer
+    // Create notifications
     try {
-      await databases.createDocument(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.NOTIFICATIONS_COLLECTION_ID, ID.unique(), {
-        userId: order.buyerId,
-        type: payment_status === "success" ? "payment_success" : "payment_failed",
-        title: payment_status === "success" ? "Payment Successful" : "Payment Failed",
-        message:
-          payment_status === "success"
-            ? "Your payment has been processed successfully"
-            : "Your payment could not be processed. Please try again.",
-        orderId: order.$id,
-        isRead: false,
-        createdAt: new Date().toISOString(),
-      })
-
-      // Also notify seller if payment successful
-      if (payment_status === "success") {
-        await databases.createDocument(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.NOTIFICATIONS_COLLECTION_ID, ID.unique(), {
-          userId: order.sellerId,
-          type: "payment_received",
-          title: "Payment Received",
-          message: "Payment has been received for your order. Please prepare the item for shipping.",
-          orderId: order.$id,
-          isRead: false,
-          createdAt: new Date().toISOString(),
-        })
+      // Notify buyer
+      if (transaction.buyerId) {
+        await databases.createDocument(
+          APP_CONFIG.APPWRITE.DATABASE_ID,
+          APP_CONFIG.APPWRITE.NOTIFICATIONS_COLLECTION_ID,
+          ID.unique(),
+          {
+            userId: transaction.buyerId,
+            type: paymentStatus === "completed" ? "payment_success" : "payment_failed",
+            title: paymentStatus === "completed" ? "Payment Successful" : "Payment Failed",
+            message:
+              paymentStatus === "completed"
+                ? `Your payment of $${callbackData.amount} has been processed successfully.`
+                : `Your payment of $${callbackData.amount} could not be processed.`,
+            data: JSON.stringify({ transactionId, amount: callbackData.amount }),
+            read: false,
+            createdAt: new Date().toISOString(),
+          },
+        )
       }
+
+      // Notify seller if payment successful
+      if (paymentStatus === "completed" && transaction.sellerId) {
+        await databases.createDocument(
+          APP_CONFIG.APPWRITE.DATABASE_ID,
+          APP_CONFIG.APPWRITE.NOTIFICATIONS_COLLECTION_ID,
+          ID.unique(),
+          {
+            userId: transaction.sellerId,
+            type: "order_paid",
+            title: "Order Payment Received",
+            message: `You have received a payment of $${callbackData.amount} for your order.`,
+            data: JSON.stringify({ transactionId, amount: callbackData.amount }),
+            read: false,
+            createdAt: new Date().toISOString(),
+          },
+        )
+      }
+
+      console.log("🔔 Notifications created")
     } catch (notificationError) {
-      console.error("Failed to create notifications:", notificationError)
+      console.error("⚠️ Failed to create notifications:", notificationError)
     }
 
+    // Return success response to ABA
     return NextResponse.json({
       success: true,
       message: "Callback processed successfully",
+      transactionId,
+      status: paymentStatus,
     })
   } catch (error: any) {
-    console.error("Callback processing error:", error)
+    console.error("💥 Callback processing error:", error)
     return NextResponse.json(
       {
-        error: "Failed to process callback",
-        details: error.message,
+        error: error.message || "Failed to process callback",
+        details: process.env.NODE_ENV === "development" ? error.stack : undefined,
       },
       { status: 500 },
     )

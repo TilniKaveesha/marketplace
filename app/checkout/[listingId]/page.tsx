@@ -12,17 +12,18 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
 import useCurrentUser from "@/hooks/api/use-current-user"
-import { Loader2, Banknote, QrCode } from "lucide-react"
+import { Loader2, Banknote, QrCode, AlertCircle } from 'lucide-react'
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface ListingData {
   $id: string
   displayTitle: string
   price: number
-  images: string[]
+  imageUrls: string[]
   shopId: string
   shop: {
     $id: string
-    shopName: string
+    ShopName: string
     userId: string
   }
 }
@@ -47,6 +48,7 @@ export default function CheckoutPage() {
   const [listing, setListing] = useState<ListingData | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState<CheckoutFormData>({
     firstName: "",
     lastName: "",
@@ -71,10 +73,11 @@ export default function CheckoutPage() {
   // Pre-fill form with user data
   useEffect(() => {
     if (user) {
+      const nameParts = user.name?.split(" ") || []
       setFormData((prev) => ({
         ...prev,
-        firstName: user.name?.split(" ")[0] || "",
-        lastName: user.name?.split(" ").slice(1).join(" ") || "",
+        firstName: nameParts[0] || "",
+        lastName: nameParts.slice(1).join(" ") || "",
         email: user.email || "",
       }))
     }
@@ -84,6 +87,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     const fetchListing = async () => {
       try {
+        setError(null)
         const response = await fetch(`/api/listing/${listingId}`)
         if (!response.ok) {
           throw new Error("Failed to fetch listing")
@@ -92,12 +96,12 @@ export default function CheckoutPage() {
         setListing(data.listing)
       } catch (error) {
         console.error("Error fetching listing:", error)
+        setError("Failed to load listing details")
         toast({
           title: "Error",
           description: "Failed to load listing details",
           variant: "destructive",
         })
-        router.push("/")
       } finally {
         setLoading(false)
       }
@@ -106,7 +110,7 @@ export default function CheckoutPage() {
     if (listingId) {
       fetchListing()
     }
-  }, [listingId, toast, router])
+  }, [listingId, toast])
 
   const handleInputChange = (field: keyof CheckoutFormData, value: string) => {
     setFormData((prev) => ({
@@ -126,11 +130,52 @@ export default function CheckoutPage() {
     return { subtotal, shipping, tax, total }
   }
 
+  const validateForm = (): boolean => {
+    const requiredFields = ["firstName", "lastName", "email", "phone", "address", "city", "postalCode"]
+
+    for (const field of requiredFields) {
+      if (!formData[field as keyof CheckoutFormData]) {
+        toast({
+          title: "Validation Error",
+          description: `Please fill in the ${field.replace(/([A-Z])/g, " $1").toLowerCase()} field`,
+          variant: "destructive",
+        })
+        return false
+      }
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(formData.email)) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid email address",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    // Phone validation (basic)
+    if (formData.phone.length < 8) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid phone number",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    return true
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!listing || !user) return
 
+    if (!validateForm()) return
+
     setSubmitting(true)
+    setError(null)
 
     try {
       const { total } = calculateTotals()
@@ -191,7 +236,20 @@ export default function CheckoutPage() {
           throw new Error(qrResult.error || "Failed to generate QR code")
         }
 
-        // Redirect to QR payment page
+        // Store QR data in session storage for the payment page
+        sessionStorage.setItem(`payment_${qrResult.transactionId}`, JSON.stringify({
+          success: true,
+          transactionId: qrResult.transactionId,
+          qrString: qrResult.qrString,
+          qrImage: qrResult.qrImage,
+          abapayDeeplink: qrResult.abapayDeeplink,
+          appStore: qrResult.appStore,
+          playStore: qrResult.playStore,
+          amount: total,
+          currency: "USD",
+          expiresAt: qrResult.expiresAt,
+        }))
+
         router.push(`/payment/qr/${qrResult.transactionId}`)
       } else {
         // Cash on delivery - create order directly
@@ -218,6 +276,7 @@ export default function CheckoutPage() {
       }
     } catch (error: any) {
       console.error("Checkout error:", error)
+      setError(error.message || "Something went wrong during checkout")
       toast({
         title: "Checkout Failed",
         description: error.message || "Something went wrong during checkout",
@@ -232,6 +291,19 @@ export default function CheckoutPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
+
+  if (error && !listing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold mb-2">Error Loading Listing</h1>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Button onClick={() => router.push("/")}>Go Home</Button>
+        </div>
       </div>
     )
   }
@@ -258,6 +330,13 @@ export default function CheckoutPage() {
           <p className="text-gray-600">Complete your purchase</p>
         </div>
 
+        {error && (
+          <Alert className="mb-6" variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Checkout Form */}
           <Card>
@@ -268,73 +347,81 @@ export default function CheckoutPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="firstName">First Name</Label>
+                    <Label htmlFor="firstName">First Name *</Label>
                     <Input
                       id="firstName"
                       value={formData.firstName}
                       onChange={(e) => handleInputChange("firstName", e.target.value)}
                       required
+                      disabled={submitting}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="lastName">Last Name</Label>
+                    <Label htmlFor="lastName">Last Name *</Label>
                     <Input
                       id="lastName"
                       value={formData.lastName}
                       onChange={(e) => handleInputChange("lastName", e.target.value)}
                       required
+                      disabled={submitting}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">Email *</Label>
                   <Input
                     id="email"
                     type="email"
                     value={formData.email}
                     onChange={(e) => handleInputChange("email", e.target.value)}
                     required
+                    disabled={submitting}
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="phone">Phone Number</Label>
+                  <Label htmlFor="phone">Phone Number *</Label>
                   <Input
                     id="phone"
                     value={formData.phone}
                     onChange={(e) => handleInputChange("phone", e.target.value)}
                     required
+                    disabled={submitting}
+                    placeholder="e.g., +855123456789"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="address">Address</Label>
+                  <Label htmlFor="address">Address *</Label>
                   <Input
                     id="address"
                     value={formData.address}
                     onChange={(e) => handleInputChange("address", e.target.value)}
                     required
+                    disabled={submitting}
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="city">City</Label>
+                    <Label htmlFor="city">City *</Label>
                     <Input
                       id="city"
                       value={formData.city}
                       onChange={(e) => handleInputChange("city", e.target.value)}
                       required
+                      disabled={submitting}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="postalCode">Postal Code</Label>
+                    <Label htmlFor="postalCode">Postal Code *</Label>
                     <Input
                       id="postalCode"
                       value={formData.postalCode}
                       onChange={(e) => handleInputChange("postalCode", e.target.value)}
                       required
+                      disabled={submitting}
                     />
                   </div>
                 </div>
@@ -347,20 +434,27 @@ export default function CheckoutPage() {
                     value={formData.paymentMethod}
                     onValueChange={(value) => handleInputChange("paymentMethod", value)}
                     className="mt-2"
+                    disabled={submitting}
                   >
                     <div className="flex items-center space-x-2 p-3 border rounded-lg">
                       <RadioGroupItem value="aba_payway" id="aba_payway" />
                       <QrCode className="h-5 w-5" />
-                      <Label htmlFor="aba_payway" className="flex-1 cursor-pointer">
-                        ABA PayWay (QR Code)
-                      </Label>
+                      <div className="flex-1">
+                        <Label htmlFor="aba_payway" className="cursor-pointer font-medium">
+                          ABA PayWay (QR Code)
+                        </Label>
+                        <p className="text-sm text-gray-500">Pay using ABA Mobile app</p>
+                      </div>
                     </div>
                     <div className="flex items-center space-x-2 p-3 border rounded-lg">
                       <RadioGroupItem value="cash_on_delivery" id="cash_on_delivery" />
                       <Banknote className="h-5 w-5" />
-                      <Label htmlFor="cash_on_delivery" className="flex-1 cursor-pointer">
-                        Cash on Delivery
-                      </Label>
+                      <div className="flex-1">
+                        <Label htmlFor="cash_on_delivery" className="cursor-pointer font-medium">
+                          Cash on Delivery
+                        </Label>
+                        <p className="text-sm text-gray-500">Pay when you receive the item</p>
+                      </div>
                     </div>
                   </RadioGroup>
                 </div>
@@ -399,7 +493,7 @@ export default function CheckoutPage() {
             <CardContent className="space-y-4">
               <div className="flex items-center space-x-4">
                 <img
-                  src={listing.images[0] || "/placeholder.svg?height=80&width=80"}
+                  src={listing.imageUrls?.[0] || "/placeholder.svg?height=80&width=80"}
                   alt={listing.displayTitle}
                   className="w-20 h-20 object-cover rounded-lg"
                 />
@@ -422,7 +516,7 @@ export default function CheckoutPage() {
                   <span>${shipping.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Tax</span>
+                  <span>Tax (10%)</span>
                   <span>${tax.toFixed(2)}</span>
                 </div>
                 <Separator />
@@ -432,10 +526,11 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 space-y-1">
                 <p>• Secure payment processing</p>
                 <p>• 30-day return policy</p>
                 <p>• Customer support available</p>
+                <p>• Free shipping on orders over $50</p>
               </div>
             </CardContent>
           </Card>

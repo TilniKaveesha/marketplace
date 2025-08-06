@@ -1,52 +1,73 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createAnonymousClient } from "@/lib/appwrite"
+import { createAdminClient } from "@/lib/appwrite"
 import { APP_CONFIG } from "@/lib/app-config"
 
 export async function GET(request: NextRequest, { params }: { params: { transactionId: string } }) {
   try {
     const { transactionId } = params
-    console.log("Checking status for transaction:", transactionId)
 
     if (!transactionId) {
       return NextResponse.json({ error: "Transaction ID is required" }, { status: 400 })
     }
 
-    // Use anonymous client for status checking
-    const { databases } = createAnonymousClient()
+    console.log("🔍 Checking payment status for transaction:", transactionId)
 
-    // Find order by transaction ID
-    const orders = await databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.ORDERS_COLLECTION_ID, [
-      `transactionId=${transactionId}`,
-    ])
+    // Get transaction from database
+    const { databases } = await createAdminClient()
 
-    if (orders.documents.length === 0) {
-      return NextResponse.json({ error: "Transaction not found" }, { status: 404 })
+    try {
+      const transaction = await databases.getDocument(
+        APP_CONFIG.APPWRITE.DATABASE_ID,
+        APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
+        transactionId,
+      )
+
+      console.log("📄 Transaction found:", {
+        id: transaction.$id,
+        status: transaction.status,
+        paymentStatus: transaction.paymentStatus,
+        amount: transaction.amount,
+      })
+
+      return NextResponse.json({
+        success: true,
+        transaction: {
+          id: transaction.$id,
+          transactionId: transaction.transactionId || transaction.$id,
+          status: transaction.status || "pending",
+          paymentStatus: transaction.paymentStatus || "pending",
+          amount: Number(transaction.amount) || 0,
+          currency: transaction.currency || "USD",
+          createdAt: transaction.createdAt,
+          updatedAt: transaction.updatedAt,
+          paidAt: transaction.paidAt || null,
+          listingId: transaction.listingId,
+          shopId: transaction.shopId,
+          buyerId: transaction.buyerId,
+          sellerId: transaction.sellerId,
+        },
+      })
+    } catch (dbError: any) {
+      console.error("❌ Transaction not found in database:", dbError)
+
+      if (dbError.code === 404) {
+        return NextResponse.json(
+          {
+            error: "Transaction not found",
+            transactionId,
+          },
+          { status: 404 },
+        )
+      }
+
+      throw dbError
     }
-
-    const order = orders.documents[0]
-    console.log("Found order:", order.$id, "Status:", order.paymentStatus)
-
-    // Check if transaction has expired
-    const expiresAt = new Date(order.expiresAt)
-    const now = new Date()
-    const isExpired = now > expiresAt
-
-    return NextResponse.json({
-      success: true,
-      transactionId,
-      orderId: order.$id,
-      status: order.paymentStatus,
-      isExpired,
-      expiresAt: order.expiresAt,
-      amount: order.amount,
-      currency: order.currency,
-    })
   } catch (error: any) {
-    console.error("Status check error:", error)
+    console.error("💥 Check status error:", error)
     return NextResponse.json(
       {
-        error: "Failed to check status",
-        details: error.message,
+        error: error.message || "Failed to check payment status",
+        details: process.env.NODE_ENV === "development" ? error.stack : undefined,
       },
       { status: 500 },
     )

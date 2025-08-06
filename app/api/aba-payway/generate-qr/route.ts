@@ -1,211 +1,183 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createSessionClient } from "@/lib/appwrite"
+import { createAdminClient } from "@/lib/appwrite"
 import { APP_CONFIG } from "@/lib/app-config"
-import { ID } from "node-appwrite"
+import {
+  generateTransactionId,
+  formatRequestTime,
+  generateHash,
+  validateAmount,
+  prepareItems,
+  prepareCustomFields,
+  encodeBase64,
+  type ABAQRRequest,
+} from "@/lib/aba-payway-utils"
 import { ABA_PAYWAY_CONFIG } from "@/lib/aba-payway-config"
-import { generateHash, encodeBase64 } from "@/lib/aba-payway-utils"
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { amount, currency = "USD", items, customer, shipping, listingId, shopId } = body
+    console.log("🚀 ABA QR Generation Request:", body)
 
-    console.log("🚀 ABA PayWay QR Generation Request:", {
-      amount,
-      currency,
-      itemsCount: items?.length,
-      customer: customer?.email,
+    const { amount, currency = "USD", items = [], customer = {}, shipping = {}, listingId, shopId, displayTitle } = body
+
+    // Validate required fields
+    if (!amount || !listingId || !shopId) {
+      return NextResponse.json({ error: "Missing required fields: amount, listingId, shopId" }, { status: 400 })
+    }
+
+    // Validate amount
+    if (!validateAmount(amount, currency)) {
+      const minAmount =
+        currency === "USD" ? ABA_PAYWAY_CONFIG.LIMITS.MIN_AMOUNT_USD : ABA_PAYWAY_CONFIG.LIMITS.MIN_AMOUNT_KHR
+      return NextResponse.json({ error: `Amount must be at least ${minAmount} ${currency}` }, { status: 400 })
+    }
+
+    // Generate transaction ID
+    const transactionId = generateTransactionId()
+    const reqTime = formatRequestTime()
+
+    // Prepare items for ABA
+    const itemsBase64 = items.length > 0 ? prepareItems(items) : ""
+
+    // Prepare custom fields with our internal data
+    const customFields = prepareCustomFields({
       listingId,
       shopId,
+      userId: customer.userId || "",
+      source: "marketplace",
     })
 
-    // Get current user session
-    const { account, databases } = await createSessionClient()
+    // Prepare callback URL
+    const callbackUrl = encodeBase64(`${ABA_PAYWAY_CONFIG.BASE_URL}/api/aba-payway/callback`)
 
-    let user
-    try {
-      user = await account.get()
-    } catch (error) {
-      console.error("❌ Authentication failed:", error)
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
-    }
-
-    // Generate unique transaction ID (max 20 characters for ABA PayWay)
-    const transactionId = `TXN${Date.now()}${Math.random().toString(36).substring(2, 8)}`.substring(0, 20)
-
-    console.log("📝 Generated Transaction ID:", transactionId)
-
-    // Prepare items for ABA PayWay (Base64 encoded)
-    const abaItems = items.map((item: any) => ({
-      name: item.name,
-      quantity: item.quantity,
-      price: Number.parseFloat(item.price.toString()),
-    }))
-
-    const itemsEncoded = encodeBase64(JSON.stringify(abaItems))
-    console.log("📦 Items encoded for ABA:", itemsEncoded.substring(0, 100) + "...")
-
-    // Prepare callback URLs
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
-    const returnUrl = `${baseUrl}/payment/success`
-    const cancelUrl = `${baseUrl}/payment/cancel`
-    const callbackUrl = `${baseUrl}/api/aba-payway/callback`
-
-    console.log("🔗 Callback URLs:", { returnUrl, cancelUrl, callbackUrl })
-
-    // Prepare custom fields (Base64 encoded)
-    const customFields = {
-      transactionId,
-      userId: user.$id,
-      listingId,
-      shopId,
-      customer,
-      shipping,
-    }
-    const customFieldsEncoded = encodeBase64(JSON.stringify(customFields))
-
-    // Prepare payment request data
-    const paymentData = {
-      req_time: Math.floor(Date.now() / 1000).toString(),
+    // Prepare ABA QR request
+    const abaRequest: ABAQRRequest = {
+      req_time: reqTime,
       merchant_id: ABA_PAYWAY_CONFIG.MERCHANT_ID,
-      api_key: ABA_PAYWAY_CONFIG.API_KEY,
-      amount: amount.toString(),
-      currency,
-      payment_option: "abapay_deeplink",
-      items: itemsEncoded,
-      shipping: encodeBase64(
-        JSON.stringify({
-          first_name: customer.firstName,
-          last_name: customer.lastName,
-          email: customer.email,
-          phone: customer.phone,
-          address: shipping.address,
-          city: shipping.city,
-          postal_code: shipping.postalCode,
-        }),
-      ),
-      enable_store_card: "0",
       tran_id: transactionId,
-      return_url: encodeBase64(returnUrl),
-      cancel_url: encodeBase64(cancelUrl),
-      callback_url: encodeBase64(callbackUrl),
-      custom_fields: customFieldsEncoded,
+      first_name: customer.firstName || "",
+      last_name: customer.lastName || "",
+      email: customer.email || "",
+      phone: customer.phone || "",
+      amount: Number(amount),
+      currency: currency.toUpperCase(),
+      purchase_type: ABA_PAYWAY_CONFIG.PURCHASE_TYPES.PURCHASE,
+      payment_option: ABA_PAYWAY_CONFIG.PAYMENT_OPTIONS.ABA_KHQR,
+      items: itemsBase64,
+      callback_url: callbackUrl,
+      return_deeplink: "",
+      custom_fields: customFields,
+      return_params: "",
+      payout: "",
+      lifetime: 30, // 30 minutes
+      qr_image_template: ABA_PAYWAY_CONFIG.QR_TEMPLATES.TEMPLATE3_COLOR,
+      hash: "", // Will be generated below
     }
-
-    console.log("💳 Payment data prepared:", {
-      ...paymentData,
-      items: "encoded",
-      shipping: "encoded",
-      custom_fields: "encoded",
-    })
 
     // Generate hash
-    const hash = generateHash(paymentData)
-    console.log("🔐 Generated hash:", hash.substring(0, 20) + "...")
+    abaRequest.hash = generateHash(abaRequest)
 
-    // Add hash to payment data
-    const finalPaymentData = {
-      ...paymentData,
-      hash,
+    console.log("📤 Sending request to ABA:", {
+      ...abaRequest,
+      hash: abaRequest.hash.substring(0, 20) + "...", // Log partial hash for security
+    })
+
+    // Create order record in database first
+    const { databases } = await createAdminClient()
+
+    try {
+      await databases.createDocument(
+        APP_CONFIG.APPWRITE.DATABASE_ID,
+        APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
+        transactionId,
+        { userId: customer.userId || "",
+          transactionId,
+          listingId,
+          listingTitle: displayTitle || "",
+          shopId:shopId,
+          price: Number(amount),
+          currency,
+          paymentMethod: "aba_payway",
+          paymentStatus: "pending",
+          status: "pending",
+          customerInfo: JSON.stringify(customer),
+          shippingInfo: JSON.stringify(shipping),
+          items: JSON.stringify(items),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      )
+      console.log("✅ Order record created:", transactionId)
+    } catch (dbError) {
+      console.error("❌ Failed to create order record:", dbError)
+      return NextResponse.json({ error: "Failed to create order record" }, { status: 500 })
     }
 
-    // Make request to ABA PayWay API
-    console.log("🌐 Making request to ABA PayWay API:", ABA_PAYWAY_CONFIG.API_URL)
-
+    // Make request to ABA API
     const abaResponse = await fetch(ABA_PAYWAY_CONFIG.API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/json",
       },
-      body: JSON.stringify(finalPaymentData),
+      body: JSON.stringify(abaRequest),
     })
 
     const abaResult = await abaResponse.json()
-    console.log("📨 ABA PayWay API Response:", {
-      status: abaResponse.status,
-      success: abaResult.status === "000",
-      message: abaResult.message,
-      transactionId: abaResult.tran_id,
+    console.log("📥 ABA Response:", {
+      status: abaResult.status,
+      hasQR: !!abaResult.qrString,
     })
 
-    if (!abaResponse.ok || abaResult.status !== "000") {
-      console.error("❌ ABA PayWay API Error:", abaResult)
-      throw new Error(abaResult.message || "ABA PayWay API request failed")
-    }
+    if (!abaResponse.ok || abaResult.status?.code !== "0") {
+      console.error("❌ ABA API Error:", abaResult)
 
-    // Store transaction in database
-    const orderData = {
-      orderId: transactionId,
-      userId: user.$id,
-      listingId,
-      shopId,
-      status: "pending",
-      paymentMethod: "aba_payway",
-      paymentStatus: "pending",
-      currency,
-      amount,
-      quantity: items.reduce((sum: number, item: any) => sum + item.quantity, 0),
-      items: JSON.stringify(items),
-      customer: JSON.stringify(customer),
-      shipping: JSON.stringify(shipping),
-      abaTransactionId: abaResult.tran_id,
-      abaQrCode: abaResult.qr_code,
-      abaDeeplink: abaResult.abapay_deeplink,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
+      // Update order status to failed
+      try {
+        await databases.updateDocument(
+          APP_CONFIG.APPWRITE.DATABASE_ID,
+          APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
+          transactionId,
+          {
+            paymentStatus: "failed",
+            status: "cancelled",
+            errorMessage: abaResult.status?.message || "QR generation failed",
+            updatedAt: new Date().toISOString(),
+          },
+        )
+      } catch (updateError) {
+        console.error("Failed to update order status:", updateError)
+      }
 
-    console.log("💾 Storing order in database:", {
-      orderId: transactionId,
-      userId: user.$id,
-      paymentStatus: "pending",
-    })
-
-    const order = await databases.createDocument(
-      APP_CONFIG.APPWRITE.DATABASE_ID,
-      APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
-      transactionId,
-      orderData,
-    )
-
-    console.log("✅ Order stored successfully:", order.$id)
-
-    // Create notification for shop owner
-    try {
-      await databases.createDocument(
-        APP_CONFIG.APPWRITE.DATABASE_ID,
-        APP_CONFIG.APPWRITE.NOTIFICATIONS_COLLECTION_ID,
-        ID.unique(),
+      return NextResponse.json(
         {
-          userId: shopId,
-          type: "new_order",
-          title: "New QR Payment Order",
-          message: `You have received a new ABA PayWay order for ${items[0]?.name}`,
-          data: JSON.stringify({ orderId: transactionId, listingId }),
-          read: false,
-          createdAt: new Date().toISOString(),
+          error: abaResult.status?.message || "Failed to generate QR code",
+          code: abaResult.status?.code,
         },
+        { status: 400 },
       )
-      console.log("🔔 Notification created for shop owner")
-    } catch (notificationError) {
-      console.error("⚠️ Failed to create notification:", notificationError)
     }
 
-    console.log("🎉 QR Generation completed successfully")
-
+    // Return successful response
     return NextResponse.json({
       success: true,
       transactionId,
-      qrCode: abaResult.qr_code,
-      deeplink: abaResult.abapay_deeplink,
-      amount,
-      currency,
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 minutes
-      message: "QR code generated successfully",
+      qrString: abaResult.qrString,
+      qrImage: abaResult.qrImage,
+      abapayDeeplink: abaResult.abapay_deeplink,
+      appStore: abaResult.app_store,
+      playStore: abaResult.play_store,
+      amount: abaResult.amount,
+      currency: abaResult.currency,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 minutes from now
     })
   } catch (error: any) {
-    console.error("💥 ABA PayWay QR Generation Error:", error)
-    return NextResponse.json({ error: error.message || "Failed to generate QR code" }, { status: 500 })
+    console.error("💥 ABA QR Generation Error:", error)
+    return NextResponse.json(
+      {
+        error: error.message || "Internal server error",
+        details: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      },
+      { status: 500 },
+    )
   }
 }

@@ -6,17 +6,33 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, CheckCircle, XCircle, Clock, Smartphone, QrCode } from "lucide-react"
+import { Loader2, CheckCircle, XCircle, Clock, Smartphone, QrCode, Copy, ExternalLink } from 'lucide-react'
 
-interface PaymentStatus {
+interface PaymentData {
   success: boolean
   transactionId: string
-  paymentStatus: "pending" | "completed" | "failed" | "expired"
-  orderStatus: string
+  qrString: string
+  qrImage: string
+  abapayDeeplink: string
+  appStore: string
+  playStore: string
   amount: number
   currency: string
-  paidAt?: string
-  updatedAt: string
+  expiresAt: string
+}
+
+interface TransactionStatus {
+  success: boolean
+  transaction: {
+    id: string
+    status: string
+    paymentStatus: string
+    amount: number
+    currency: string
+    createdAt: string
+    updatedAt: string
+    paidAt?: string
+  }
 }
 
 export default function QRPaymentPage() {
@@ -24,9 +40,8 @@ export default function QRPaymentPage() {
   const router = useRouter()
   const { toast } = useToast()
 
-  const [qrCode, setQrCode] = useState<string>("")
-  const [deeplink, setDeeplink] = useState<string>("")
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | null>(null)
+  const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
+  const [transactionStatus, setTransactionStatus] = useState<TransactionStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [timeRemaining, setTimeRemaining] = useState(30 * 60) // 30 minutes in seconds
   const [checking, setChecking] = useState(false)
@@ -43,9 +58,9 @@ export default function QRPaymentPage() {
       const data = await response.json()
 
       if (data.success) {
-        setPaymentStatus(data)
+        setTransactionStatus(data)
 
-        if (data.paymentStatus === "completed") {
+        if (data.transaction.paymentStatus === "completed") {
           toast({
             title: "Payment Successful!",
             description: "Your payment has been processed successfully.",
@@ -53,7 +68,7 @@ export default function QRPaymentPage() {
           setTimeout(() => {
             router.push(`/orders/success/${transactionId}`)
           }, 2000)
-        } else if (data.paymentStatus === "failed") {
+        } else if (data.transaction.paymentStatus === "failed") {
           toast({
             title: "Payment Failed",
             description: "Your payment could not be processed.",
@@ -68,17 +83,16 @@ export default function QRPaymentPage() {
     }
   }
 
-  // Initialize payment data
+  // Initialize payment data from session storage or fetch from API
   useEffect(() => {
     const initializePayment = async () => {
       try {
-        // Get QR code and deeplink from session storage or API
-        const qrData = sessionStorage.getItem(`qr_${transactionId}`)
-        const deeplinkData = sessionStorage.getItem(`deeplink_${transactionId}`)
-
-        if (qrData && deeplinkData) {
-          setQrCode(qrData)
-          setDeeplink(deeplinkData)
+        // Try to get data from session storage first
+        const storedData = sessionStorage.getItem(`payment_${transactionId}`)
+        if (storedData) {
+          const data = JSON.parse(storedData)
+          setPaymentData(data)
+          console.log("Payment data loaded from session:", data)
         }
 
         // Check initial status
@@ -100,25 +114,30 @@ export default function QRPaymentPage() {
     }
   }, [transactionId])
 
-  // Poll payment status every 3 seconds
+  // Poll payment status every 5 seconds if payment is pending
   useEffect(() => {
-    if (paymentStatus?.paymentStatus === "pending") {
-      const interval = setInterval(checkPaymentStatus, 3000)
+    if (transactionStatus?.transaction.paymentStatus === "pending") {
+      const interval = setInterval(checkPaymentStatus, 5000)
       return () => clearInterval(interval)
     }
-  }, [paymentStatus?.paymentStatus])
+  }, [transactionStatus?.transaction.paymentStatus])
 
   // Countdown timer
   useEffect(() => {
-    if (timeRemaining > 0 && paymentStatus?.paymentStatus === "pending") {
+    if (timeRemaining > 0 && transactionStatus?.transaction.paymentStatus === "pending") {
       const timer = setTimeout(() => {
         setTimeRemaining((prev) => prev - 1)
       }, 1000)
       return () => clearTimeout(timer)
     } else if (timeRemaining === 0) {
-      setPaymentStatus((prev) => (prev ? { ...prev, paymentStatus: "expired" } : null))
+      setTransactionStatus((prev) => 
+        prev ? {
+          ...prev,
+          transaction: { ...prev.transaction, paymentStatus: "expired" }
+        } : null
+      )
     }
-  }, [timeRemaining, paymentStatus?.paymentStatus])
+  }, [timeRemaining, transactionStatus?.transaction.paymentStatus])
 
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60)
@@ -127,8 +146,18 @@ export default function QRPaymentPage() {
   }
 
   const handleOpenMobileApp = () => {
-    if (deeplink) {
-      window.location.href = deeplink
+    if (paymentData?.abapayDeeplink) {
+      window.location.href = paymentData.abapayDeeplink
+    }
+  }
+
+  const handleCopyQR = () => {
+    if (paymentData?.qrString) {
+      navigator.clipboard.writeText(paymentData.qrString)
+      toast({
+        title: "Copied!",
+        description: "QR code string copied to clipboard",
+      })
     }
   }
 
@@ -136,16 +165,8 @@ export default function QRPaymentPage() {
     router.back()
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
-  }
-
   const getStatusIcon = () => {
-    switch (paymentStatus?.paymentStatus) {
+    switch (transactionStatus?.transaction.paymentStatus) {
       case "completed":
         return <CheckCircle className="h-12 w-12 text-green-500" />
       case "failed":
@@ -158,7 +179,7 @@ export default function QRPaymentPage() {
   }
 
   const getStatusMessage = () => {
-    switch (paymentStatus?.paymentStatus) {
+    switch (transactionStatus?.transaction.paymentStatus) {
       case "completed":
         return {
           title: "Payment Successful!",
@@ -186,8 +207,36 @@ export default function QRPaymentPage() {
     }
   }
 
+  // Get the correct amount and currency - prioritize paymentData over transactionStatus
+  const getPaymentAmount = () => {
+    if (paymentData) {
+      return {
+        amount: paymentData.amount,
+        currency: paymentData.currency
+      }
+    } else if (transactionStatus) {
+      return {
+        amount: transactionStatus.transaction.amount,
+        currency: transactionStatus.transaction.currency
+      }
+    }
+    return { amount: 0, currency: "USD" }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p>Loading payment information...</p>
+        </div>
+      </div>
+    )
+  }
+
   const statusMessage = getStatusMessage()
   const progressPercentage = ((30 * 60 - timeRemaining) / (30 * 60)) * 100
+  const { amount, currency } = getPaymentAmount()
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -205,7 +254,7 @@ export default function QRPaymentPage() {
           </CardHeader>
 
           <CardContent className="space-y-6">
-            {paymentStatus?.paymentStatus === "pending" && (
+            {transactionStatus?.transaction.paymentStatus === "pending" && (
               <>
                 {/* Timer */}
                 <div className="text-center">
@@ -215,20 +264,43 @@ export default function QRPaymentPage() {
                 </div>
 
                 {/* QR Code */}
-                {qrCode && (
+                {paymentData?.qrImage && (
                   <div className="flex justify-center">
-                    <div className="bg-white p-4 rounded-lg border-2 border-gray-200">
-                      <img src={qrCode || "/placeholder.svg"} alt="Payment QR Code" className="w-64 h-64" />
+                    <div className="bg-white p-4 rounded-lg border-2 border-gray-200 relative">
+                      <img 
+                        src={paymentData.qrImage || "/placeholder.svg"} 
+                        alt="Payment QR Code" 
+                        className="w-150 h-150 object-contain mx-auto" 
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="absolute top-2 right-2"
+                        onClick={handleCopyQR}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 )}
 
-                {/* Mobile App Button */}
-                <div className="text-center">
-                  <Button onClick={handleOpenMobileApp} className="w-full max-w-sm bg-transparent" variant="outline">
+                {/* Action Buttons */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Button onClick={handleOpenMobileApp} className="w-full">
                     <Smartphone className="mr-2 h-4 w-4" />
-                    Open ABA Mobile App
+                    Open ABA Mobile
                   </Button>
+                  
+                  {paymentData?.appStore && (
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={() => window.open(paymentData.appStore, '_blank')}
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Download App
+                    </Button>
+                  )}
                 </div>
 
                 {/* Instructions */}
@@ -244,29 +316,74 @@ export default function QRPaymentPage() {
                 </div>
 
                 {/* Payment Details */}
-                {paymentStatus && (
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="font-semibold mb-2">Payment Details:</h3>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span>Amount:</span>
-                        <span className="font-semibold">
-                          ${paymentStatus.amount.toFixed(2)} {paymentStatus.currency}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Status:</span>
-                        <span className="capitalize">{paymentStatus.paymentStatus}</span>
-                      </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold mb-2">Payment Details:</h3>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span>Amount:</span>
+                      <span className="font-semibold">
+                        ${amount.toFixed(2)} {currency}
+                      </span>
                     </div>
+                    <div className="flex justify-between">
+                      <span>Status:</span>
+                      <span className="capitalize">
+                        {transactionStatus?.transaction.paymentStatus || "pending"}
+                      </span>
+                    </div>
+                    {transactionStatus?.transaction.createdAt && (
+                      <div className="flex justify-between">
+                        <span>Created:</span>
+                        <span>{new Date(transactionStatus.transaction.createdAt).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {paymentData?.expiresAt && (
+                      <div className="flex justify-between">
+                        <span>Expires:</span>
+                        <span>{new Date(paymentData.expiresAt).toLocaleString()}</span>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </>
             )}
 
-            {/* Action Buttons */}
+            {/* Success State */}
+            {transactionStatus?.transaction.paymentStatus === "completed" && (
+              <div className="text-center space-y-4">
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-green-800 mb-2">Payment Completed!</h3>
+                  <p className="text-green-700">
+                    Your payment of ${amount.toFixed(2)} {currency} has been processed successfully.
+                  </p>
+                  {transactionStatus.transaction.paidAt && (
+                    <p className="text-sm text-green-600 mt-2">
+                      Paid at: {new Date(transactionStatus.transaction.paidAt).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Failed State */}
+            {transactionStatus?.transaction.paymentStatus === "failed" && (
+              <div className="text-center space-y-4">
+                <div className="bg-red-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-red-800 mb-2">Payment Failed</h3>
+                  <p className="text-red-700">
+                    Your payment of ${amount.toFixed(2)} {currency} could not be processed.
+                  </p>
+                  <p className="text-sm text-red-600 mt-2">
+                    Please try again or contact support if the issue persists.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons for Failed/Expired */}
             <div className="flex gap-4">
-              {(paymentStatus?.paymentStatus === "failed" || paymentStatus?.paymentStatus === "expired") && (
+              {(transactionStatus?.transaction.paymentStatus === "failed" || 
+                transactionStatus?.transaction.paymentStatus === "expired") && (
                 <Button onClick={handleRetry} className="flex-1">
                   Try Again
                 </Button>
