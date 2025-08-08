@@ -1,28 +1,28 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { updateUserStatus } from '@/lib/admin-actions'
+import { NextRequest, NextResponse } from "next/server";
+import { updateUserStatus } from "@/lib/admin-actions";
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { userId: string } }
 ) {
   try {
-    const { status } = await request.json()
-    
-    if (!['active', 'suspended'].includes(status)) {
+    const { status } = await request.json();
+    const { userId } = params;
+
+    if (!status || !userId) {
       return NextResponse.json(
-        { error: 'Invalid status' },
+        { error: "Missing required fields" },
         { status: 400 }
-      )
+      );
     }
 
-    const updatedUser = await updateUserStatus(params.userId, status)
-    
-    return NextResponse.json(updatedUser)
+    const updatedUser = await updateUserStatus(userId, status);
+    return NextResponse.json(updatedUser);
   } catch (error) {
-    console.error('Failed to update user status:', error)
+    console.error("Error updating user status:", error);
     return NextResponse.json(
-      { error: 'Failed to update user status' },
+      { error: "Failed to update user status" },
       { status: 500 }
-    )
+    );
   }
 }

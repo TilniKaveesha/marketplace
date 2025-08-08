@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { updateListingStatus } from '@/lib/admin-actions'
+import { NextRequest, NextResponse } from "next/server"
+import { updateListingStatus } from "@/lib/admin-actions"
 
 export async function PATCH(
   request: NextRequest,
@@ -7,21 +7,25 @@ export async function PATCH(
 ) {
   try {
     const { status } = await request.json()
-    
-    if (!['active', 'suspended', 'pending'].includes(status)) {
+    const { listingId } = params
+
+    if (!status || !['active', 'suspended', 'pending'].includes(status)) {
       return NextResponse.json(
-        { error: 'Invalid status' },
+        { error: "Invalid status" },
         { status: 400 }
       )
     }
 
-    const updatedListing = await updateListingStatus(params.listingId, status)
-    
-    return NextResponse.json(updatedListing)
+    const updatedListing = await updateListingStatus(listingId, status)
+
+    return NextResponse.json({
+      success: true,
+      listing: updatedListing
+    })
   } catch (error) {
-    console.error('Failed to update listing status:', error)
+    console.error("Failed to update listing status:", error)
     return NextResponse.json(
-      { error: 'Failed to update listing status' },
+      { error: "Failed to update listing status" },
       { status: 500 }
     )
   }

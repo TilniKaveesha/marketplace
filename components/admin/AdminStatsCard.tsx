@@ -1,23 +1,22 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { type LucideIcon, TrendingUp, TrendingDown } from 'lucide-react'
-import { cn } from "@/lib/utils"
+import { type LucideIcon } from 'lucide-react'
 
 interface AdminStatsCardProps {
   title: string
   value: string
-  change: string
-  trend: "up" | "down"
-  icon: LucideIcon
   description: string
+  icon: LucideIcon
+  trend: "up" | "down"
+  change?: string
 }
 
 export function AdminStatsCard({
   title,
   value,
-  change,
-  trend,
+  description,
   icon: Icon,
-  description
+  trend,
+  change
 }: AdminStatsCardProps) {
   return (
     <Card>
@@ -27,20 +26,12 @@ export function AdminStatsCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{value}</div>
-        <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-          <div className={cn(
-            "flex items-center",
-            trend === "up" ? "text-green-600" : "text-red-600"
-          )}>
-            {trend === "up" ? (
-              <TrendingUp className="h-3 w-3 mr-1" />
-            ) : (
-              <TrendingDown className="h-3 w-3 mr-1" />
-            )}
+        <p className="text-xs text-muted-foreground">{description}</p>
+        {change && (
+          <p className={`text-xs ${trend === "up" ? "text-green-600" : "text-red-600"} mt-1`}>
             {change}
-          </div>
-          <span>{description}</span>
-        </div>
+          </p>
+        )}
       </CardContent>
     </Card>
   )
