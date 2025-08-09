@@ -1,32 +1,40 @@
-import { NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { updateShopStatus } from "@/lib/admin-actions"
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { shopId: string } }
-) {
+export async function PATCH(request: NextRequest, { params }: { params: { shopId: string } }) {
   try {
-    const { status } = await request.json()
     const { shopId } = params
+    const { status } = await request.json()
 
-    if (!status || !['active', 'suspended', 'pending'].includes(status)) {
-      return NextResponse.json(
-        { error: "Invalid status" },
-        { status: 400 }
-      )
+    if (!shopId) {
+      return NextResponse.json({ success: false, error: "Shop ID is required" }, { status: 400 })
+    }
+
+    if (!status) {
+      return NextResponse.json({ success: false, error: "Status is required" }, { status: 400 })
+    }
+
+    // Validate status
+    if (!["active", "pending", "suspended"].includes(status)) {
+      return NextResponse.json({ success: false, error: "Invalid status" }, { status: 400 })
     }
 
     const updatedShop = await updateShopStatus(shopId, status)
 
     return NextResponse.json({
       success: true,
-      shop: updatedShop
+      message: `Shop ${status} successfully`,
+      data: updatedShop,
     })
   } catch (error) {
-    console.error("Failed to update shop status:", error)
+    console.error("Error updating shop status:", error)
     return NextResponse.json(
-      { error: "Failed to update shop status" },
-      { status: 500 }
+      {
+        success: false,
+        error: "Failed to update shop status",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
     )
   }
 }
