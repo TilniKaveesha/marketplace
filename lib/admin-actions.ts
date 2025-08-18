@@ -1,7 +1,3 @@
-import { Query } from "appwrite"
-import { createAdminClient } from "./appwrite"
-import { APP_CONFIG } from "./app-config"
-
 // Constants
 const DEFAULT_LIMIT = 1000
 const DEFAULT_OFFSET = 0
@@ -92,25 +88,18 @@ export interface Order {
 }
 
 // Get overall admin stats
-export async function getAdminStats(): Promise<AdminStats> {
+export async function getAdminStats() {
   try {
-    const { databases, users } = await createAdminClient()
-
-    const [authUsersResponse, shopsResponse, listingsResponse, ordersResponse] = await Promise.all([
-      users.list([Query.limit(1)]),
-      databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.SHOP_ID, [Query.limit(1)]),
-      databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.ITEM_LISTING_ID, [Query.limit(1)]),
-      databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID, [
-        Query.limit(1),
-      ]),
-    ])
-
-    return {
-      totalUsers: authUsersResponse.total,
-      totalShops: shopsResponse.total,
-      totalListings: listingsResponse.total,
-      totalOrders: ordersResponse.total,
-    }
+    const response = await fetch("/api/admin/stats")
+    const data = await response.json()
+    return data.success
+      ? data.data
+      : {
+          totalUsers: 0,
+          totalShops: 0,
+          totalListings: 0,
+          totalOrders: 0,
+        }
   } catch (error) {
     console.error("Error fetching admin stats:", error)
     return {
@@ -125,59 +114,9 @@ export async function getAdminStats(): Promise<AdminStats> {
 // Get all users (combining auth users with custom user data)
 export async function getAllUsers(limit = DEFAULT_LIMIT, offset = DEFAULT_OFFSET): Promise<CombinedUser[]> {
   try {
-    const { databases, users } = await createAdminClient()
-
-    console.log("Fetching auth users...")
-
-    // Get auth users
-    const authUsersResponse = await users.list([
-      Query.limit(limit),
-      Query.offset(offset),
-      Query.orderDesc("registration"),
-    ])
-
-    console.log("Auth users response:", authUsersResponse)
-
-    // Get custom user data
-    const customUsersMap = new Map<string, CustomUser>()
-    try {
-      const customUsersResponse = await databases.listDocuments(
-        APP_CONFIG.APPWRITE.DATABASE_ID,
-        APP_CONFIG.APPWRITE.USER_ID,
-        [Query.limit(limit)],
-      )
-      console.log("Custom users response:", customUsersResponse)
-
-      customUsersResponse.documents.forEach((doc: any) => {
-        customUsersMap.set(doc.userId, doc as CustomUser)
-      })
-    } catch (error) {
-      console.log("No custom user collection or error fetching:", error)
-    }
-
-    // Combine auth users with custom data
-    const combinedUsers: CombinedUser[] = authUsersResponse.users.map((authUser: any) => {
-      const customUser = customUsersMap.get(authUser.$id)
-
-      return {
-        $id: authUser.$id,
-        name: authUser.name || authUser.email?.split("@")[0] || "Unknown User",
-        email: authUser.email,
-        phone: authUser.phone,
-        customPhone: customUser?.Phone,
-        idNumber: customUser?.IdNumber,
-        status: authUser.status ? "active" : "suspended",
-        role: authUser.labels?.includes("admin") ? "admin" : "user",
-        $createdAt: authUser.registration,
-        $updatedAt: authUser.registration,
-        labels: authUser.labels || [],
-        emailVerified: authUser.emailVerification,
-        phoneVerified: authUser.phoneVerification,
-      }
-    })
-
-    console.log("Combined users:", combinedUsers)
-    return combinedUsers
+    const response = await fetch(`/api/admin/users?limit=${limit}&offset=${offset}`)
+    const data = await response.json()
+    return data.success ? data.data : []
   } catch (error) {
     console.error("Failed to get users:", error)
     throw error
@@ -187,140 +126,21 @@ export async function getAllUsers(limit = DEFAULT_LIMIT, offset = DEFAULT_OFFSET
 // Get all shops (with owner information)
 export async function getAllShops(limit = DEFAULT_LIMIT, offset = DEFAULT_OFFSET): Promise<Shop[]> {
   try {
-    const { databases, users } = await createAdminClient()
-
-    console.log("Fetching shops from database:", APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.SHOP_ID)
-
-    const response = await databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.SHOP_ID, [
-      Query.limit(limit),
-      Query.offset(offset),
-      Query.orderDesc("$createdAt"),
-    ])
-
-    console.log("Shops response:", response)
-
-    // Get owner information for each shop
-    const shopsWithOwners = await Promise.all(
-      response.documents.map(async (doc: any) => {
-        let ownerName = "Unknown Owner"
-        let ownerEmail = ""
-
-        try {
-          // Get owner info from auth users
-          const owner = await users.get(doc.userId)
-          ownerName = owner.name || owner.email?.split("@")[0] || "Unknown Owner"
-          ownerEmail = owner.email || ""
-        } catch (error) {
-          console.log(`Could not fetch owner info for user ${doc.userId}:`, error)
-        }
-
-        return {
-          $id: doc.$id,
-          ShopName: doc.ShopName || "Unnamed Shop",
-          Description: doc.Description || "",
-          userId: doc.userId,
-          ownerName,
-          ownerEmail,
-          status: doc.status || "pending",
-          logo: doc.logo,
-          totalListings: doc.totalListings || 0,
-          $createdAt: doc.$createdAt,
-          $updatedAt: doc.$updatedAt,
-        } as Shop
-      }),
-    )
-
-    console.log("Shops with owners:", shopsWithOwners)
-    return shopsWithOwners
+    const response = await fetch(`/api/admin/shops?limit=${limit}&offset=${offset}`)
+    const data = await response.json()
+    return data.success ? data.data : []
   } catch (error) {
     console.error("Failed to get shops:", error)
     throw error
   }
 }
 
-// Get analytics data
-export async function getAnalyticsData(period = "30d") {
-  const { databases } = await createAdminClient()
-
-  // Calculate date range based on period
-  const now = new Date()
-  const startDate = new Date()
-
-  switch (period) {
-    case "7d":
-      startDate.setDate(now.getDate() - 7)
-      break
-    case "30d":
-      startDate.setDate(now.getDate() - 30)
-      break
-    case "90d":
-      startDate.setDate(now.getDate() - 90)
-      break
-    case "1y":
-      startDate.setFullYear(now.getFullYear() - 1)
-      break
-    default:
-      startDate.setDate(now.getDate() - 30)
-  }
-
-  // Get total counts
-  const [users, shops, listings, orders] = await Promise.all([
-    databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.USER_ID, [Query.limit(1)]),
-    databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.SHOP_ID, [Query.limit(1)]),
-    databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.ITEM_LISTING_ID, [Query.limit(1)]),
-    databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID, [Query.limit(1)]),
-  ])
-
-  // Get recent orders for revenue calculation
-  const recentOrders = await databases.listDocuments(
-    APP_CONFIG.APPWRITE.DATABASE_ID,
-    APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
-    [
-      Query.greaterThanEqual("$createdAt", startDate.toISOString()),
-      Query.equal("paymentStatus", "completed"),
-      Query.limit(1000),
-    ],
-  )
-
-  const totalRevenue = recentOrders.documents.reduce((sum, order) => {
-    return sum + (Number(order.amount) || 0)
-  }, 0)
-
-  return {
-    totalUsers: users.total,
-    totalShops: shops.total,
-    totalListings: listings.total,
-    totalOrders: orders.total,
-    totalRevenue,
-    period,
-    recentOrders: recentOrders.documents.slice(0, 10),
-  }
-}
-
 // Get all listings
 export async function getAllListings(limit = DEFAULT_LIMIT, offset = DEFAULT_OFFSET): Promise<Listing[]> {
   try {
-    const { databases } = await createAdminClient()
-
-    const response = await databases.listDocuments(
-      APP_CONFIG.APPWRITE.DATABASE_ID,
-      APP_CONFIG.APPWRITE.ITEM_LISTING_ID,
-      [Query.limit(limit), Query.offset(offset), Query.orderDesc("$createdAt")],
-    )
-
-    return response.documents.map((doc: any) => ({
-      $id: doc.$id,
-      title: doc.title || "Untitled Listing",
-      description: doc.description || "",
-      price: doc.price || 0,
-      images: doc.images || [],
-      category: doc.category || "Other",
-      status: doc.status || "pending",
-      sellerName: doc.sellerName || "Unknown Seller",
-      sellerId: doc.sellerId,
-      $createdAt: doc.$createdAt,
-      $updatedAt: doc.$updatedAt,
-    })) as Listing[]
+    const response = await fetch(`/api/admin/listings?limit=${limit}&offset=${offset}`)
+    const data = await response.json()
+    return data.success ? data.data : []
   } catch (error) {
     console.error("Failed to get listings:", error)
     throw error
@@ -330,24 +150,9 @@ export async function getAllListings(limit = DEFAULT_LIMIT, offset = DEFAULT_OFF
 // Get all orders
 export async function getAllOrders(limit = DEFAULT_LIMIT, offset = DEFAULT_OFFSET): Promise<Order[]> {
   try {
-    const { databases } = await createAdminClient()
-
-    const response = await databases.listDocuments(
-      APP_CONFIG.APPWRITE.DATABASE_ID,
-      APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
-      [Query.limit(limit), Query.offset(offset), Query.orderDesc("$createdAt")],
-    )
-
-    return response.documents.map((doc: any) => ({
-      $id: doc.$id,
-      buyerId: doc.buyerId,
-      sellerId: doc.sellerId,
-      listingId: doc.listingId,
-      totalAmount: doc.totalAmount || 0,
-      status: doc.status || "pending",
-      $createdAt: doc.$createdAt,
-      $updatedAt: doc.$updatedAt,
-    })) as Order[]
+    const response = await fetch(`/api/admin/orders?limit=${limit}&offset=${offset}`)
+    const data = await response.json()
+    return data.success ? data.data : []
   } catch (error) {
     console.error("Error fetching orders:", error)
     throw error
@@ -357,12 +162,13 @@ export async function getAllOrders(limit = DEFAULT_LIMIT, offset = DEFAULT_OFFSE
 // Update user status (auth user)
 export async function updateUserStatus(userId: string, status: "active" | "suspended"): Promise<boolean> {
   try {
-    const { users } = await createAdminClient()
-
-    // Update auth user status
-    await users.updateStatus(userId, status === "active")
-
-    return true
+    const response = await fetch(`/api/admin/users/${userId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    })
+    const data = await response.json()
+    return data.success
   } catch (error) {
     console.error("Failed to update user status:", error)
     throw error
@@ -371,30 +177,20 @@ export async function updateUserStatus(userId: string, status: "active" | "suspe
 
 // Update user labels (for admin role)
 export async function updateUserLabels(userId: string, labels: string[]): Promise<boolean> {
-  try {
-    const { users } = await createAdminClient()
-
-    await users.updateLabels(userId, labels)
-
-    return true
-  } catch (error) {
-    console.error("Failed to update user labels:", error)
-    throw error
-  }
+  // Placeholder for future implementation
+  return false
 }
 
 // Update shop status
-export async function updateShopStatus(shopId: string, status: Shop["status"]): Promise<Shop> {
+export async function updateShopStatus(shopId: string, status: Shop["status"]): Promise<Shop | null > {
   try {
-    const { databases } = await createAdminClient()
-
-    const response = await databases.updateDocument(
-      APP_CONFIG.APPWRITE.DATABASE_ID,
-      APP_CONFIG.APPWRITE.SHOP_ID,
-      shopId,
-      { status },
-    )
-    return response as unknown as Shop
+    const response = await fetch(`/api/admin/shops/${shopId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    })
+    const data = await response.json()
+    return data.success ? data.data : null
   } catch (error) {
     console.error("Failed to update shop status:", error)
     throw error
@@ -402,160 +198,113 @@ export async function updateShopStatus(shopId: string, status: Shop["status"]): 
 }
 
 // Update listing status
-export async function updateListingStatus(listingId: string, status: Listing["status"]): Promise<Listing> {
+export async function updateListingStatus(listingId: string, status: Listing["status"]): Promise<Listing | null> {
   try {
-    const { databases } = await createAdminClient()
-
-    const response = await databases.updateDocument(
-      APP_CONFIG.APPWRITE.DATABASE_ID,
-      APP_CONFIG.APPWRITE.ITEM_LISTING_ID,
-      listingId,
-      { status },
-    )
-    return response as unknown as Listing
+    const response = await fetch(`/api/admin/listings/${listingId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    })
+    const data = await response.json()
+    return data.success ? data.data : null
   } catch (error) {
     console.error("Failed to update listing status:", error)
     throw error
   }
 }
 
+// Update order status
+export async function updateOrderStatus(orderId: string, status?: string, paymentStatus?: string) {
+  try {
+    const response = await fetch(`/api/admin/orders/${orderId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, paymentStatus }),
+    })
+    const data = await response.json()
+    return data.success ? data.data : null
+  } catch (error) {
+    console.error("Error updating order status:", error)
+    return null
+  }
+}
+
+// Get analytics data
+export async function getAnalyticsData(period = "30d") {
+  try {
+    const response = await fetch(`/api/admin/analytics?period=${period}`)
+    const data = await response.json()
+    return data.success ? data.data : null
+  } catch (error) {
+    console.error("Error fetching analytics:", error)
+    return null
+  }
+}
+
 // Generate reports
 export async function generateReport(type: string, startDate: string, endDate: string, format = "json") {
-  const { databases } = await createAdminClient()
-
-  const queries: any[] = [Query.limit(1000)]
-
-  if (startDate) {
-    queries.push(Query.greaterThanEqual("$createdAt", startDate))
+  try {
+    const response = await fetch("/api/admin/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, startDate, endDate, format }),
+    })
+    const data = await response.json()
+    return data.success ? data.data : null
+  } catch (error) {
+    console.error("Error generating report:", error)
+    return null
   }
-
-  if (endDate) {
-    queries.push(Query.lessThanEqual("$createdAt", endDate))
-  }
-
-  let data: any
-
-  switch (type) {
-    case "sales":
-      const orders = await databases.listDocuments(
-        APP_CONFIG.APPWRITE.DATABASE_ID,
-        APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
-        [...queries, Query.equal("paymentStatus", "completed")],
-      )
-      data = orders.documents
-      break
-
-    case "users":
-      const users = await databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.USER_ID, queries)
-      data = users.documents
-      break
-
-    case "inventory":
-      const listings = await databases.listDocuments(
-        APP_CONFIG.APPWRITE.DATABASE_ID,
-        APP_CONFIG.APPWRITE.ITEM_LISTING_ID,
-        queries,
-      )
-      data = listings.documents
-      break
-
-    default:
-      // Overview report
-      const [allUsers, allShops, allListings, allOrders] = await Promise.all([
-        databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.USER_ID, [Query.limit(100)]),
-        databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.SHOP_ID, [Query.limit(100)]),
-        databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.ITEM_LISTING_ID, [
-          Query.limit(100),
-        ]),
-        databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID, [
-          Query.limit(100),
-        ]),
-      ])
-
-      data = {
-        users: allUsers.total,
-        shops: allShops.total,
-        listings: allListings.total,
-        orders: allOrders.total,
-        summary: {
-          totalUsers: allUsers.total,
-          totalShops: allShops.total,
-          totalListings: allListings.total,
-          totalOrders: allOrders.total,
-        },
-      }
-  }
-
-  if (format === "csv") {
-    // Convert to CSV format
-    if (Array.isArray(data) && data.length > 0) {
-      const headers = Object.keys(data[0]).join(",")
-      const rows = data.map((item) => Object.values(item).join(",")).join("\n")
-      return `${headers}\n${rows}`
-    }
-    return "No data available"
-  }
-
-  return data
 }
+
 // Get admin settings
 export async function getAdminSettings() {
-  // This would typically come from a settings collection
-  // For now, return default settings
-  return {
-    platform: {
-      siteName: "MarketPlace Master",
-      currency: "USD",
-      timezone: "UTC",
-      maintenanceMode: false,
-    },
-    payment: {
-      commissionRate: 5,
-      payoutSchedule: "weekly",
-      minimumPayout: 50,
-    },
-    security: {
-      twoFactorRequired: false,
-      passwordMinLength: 8,
-      sessionTimeout: 24,
-    },
+  try {
+    const response = await fetch("/api/admin/settings")
+    const data = await response.json()
+    return data.success
+      ? data.data
+      : {
+          platform: {
+            siteName: "MarketPlace Master",
+            currency: "USD",
+            timezone: "UTC",
+            maintenanceMode: false,
+          },
+          payment: {
+            commissionRate: 5,
+            payoutSchedule: "weekly",
+            minimumPayout: 50,
+          },
+          security: {
+            twoFactorRequired: false,
+            passwordMinLength: 8,
+            sessionTimeout: 24,
+          },
+        }
+  } catch (error) {
+    console.error("Error fetching admin settings:", error)
+    return null
   }
 }
 
 // Update admin settings
 export async function updateAdminSettings(category: string, settings: any) {
-  // This would typically update a settings collection
-  // For now, just return the updated settings
-  console.log(`Updating ${category} settings:`, settings)
-  return settings
+  try {
+    const response = await fetch("/api/admin/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category, settings }),
+    })
+    const data = await response.json()
+    return data.success ? data.data : null
+  } catch (error) {
+    console.error("Error updating admin settings:", error)
+    return null
+  }
 }
 
-// Update order status
-export async function updateOrderStatus(orderId: string, status?: string, paymentStatus?: string) {
-  const { databases } = await createAdminClient()
-
-  const updateData: any = {
-    updatedAt: new Date().toISOString(),
-  }
-
-  if (status) {
-    updateData.status = status
-  }
-
-  if (paymentStatus) {
-    updateData.paymentStatus = paymentStatus
-  }
-
-  const updatedOrder = await databases.updateDocument(
-    APP_CONFIG.APPWRITE.DATABASE_ID,
-    APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
-    orderId,
-    updateData,
-  )
-
-  return updatedOrder
-}
-
+// Fetch admin analytics
 export async function fetchAdminAnalytics(period = "30d") {
   try {
     const response = await fetch(`/api/admin/analytics?period=${period}`)

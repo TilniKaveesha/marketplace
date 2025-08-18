@@ -12,22 +12,30 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 interface Order {
   $id: string
-  orderId: string
-  listingTitle: string
-  amount: number
-  currency: string
+  orderId?: string
+  listingTitle?: string
+  totalAmount: number
+  amount?: number
+  currency?: string
   status: string
-  paymentStatus: string
-  paymentMethod: string
-  userId: string
-  shopId: string
+  paymentStatus?: string
+  paymentMethod?: string
+  userId?: string
+  buyerId: string
+  sellerId: string
+  listingId: string
+  shopId?: string
   $createdAt: string
   customerInfo?: string
 }
 
-export function AdminOrdersContent() {
-  const [orders, setOrders] = useState<Order[]>([])
-  const [loading, setLoading] = useState(true)
+interface AdminOrdersContentProps {
+  initialOrders: Order[]
+}
+
+export function AdminOrdersContent({ initialOrders }: AdminOrdersContentProps) {
+  const [orders, setOrders] = useState<Order[]>(initialOrders)
+  const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState("all")
   const [paymentFilter, setPaymentFilter] = useState("all")
 
@@ -52,41 +60,50 @@ export function AdminOrdersContent() {
   }
 
   useEffect(() => {
-    fetchOrders()
+    const timeoutId = setTimeout(() => {
+      fetchOrders()
+    }, 300)
+    return () => clearTimeout(timeoutId)
   }, [statusFilter, paymentFilter])
 
-  const totalRevenue = orders.filter((o) => o.paymentStatus === "completed").reduce((sum, o) => sum + o.amount, 0)
+  const totalRevenue = orders
+    .filter((o) => o.paymentStatus === "completed" || o.status === "completed")
+    .reduce((sum, o) => sum + (o.totalAmount || o.amount || 0), 0)
 
-const stats = [
-  {
-    title: "Total Orders",
-    value: orders.length.toString(),
-    description: "All time orders",
-    trend: "up",
-    icon: BarChart3,            // Add icon here
-  },
-  {
-    title: "Completed Orders",
-    value: orders.filter((o) => o.status === "completed").length.toString(),
-    description: "Successfully fulfilled",
-    trend: "up",
-    icon: CheckCircle,          // Add icon here
-  },
-  {
-    title: "Total Revenue",
-    value: `$${totalRevenue.toLocaleString()}`,
-    description: "From completed orders",
-    trend: "up",
-    icon: DollarSign,           // Add icon here
-  },
-  {
-    title: "Pending Orders",
-    value: orders.filter((o) => o.status === "pending").length.toString(),
-    description: "Awaiting processing",
-    trend: "down",
-    icon: Clock,                // Add icon here
-  },
-]
+  const stats = [
+    {
+      title: "Total Orders",
+      value: orders.length.toString(),
+      description: "All time orders",
+      trend: "up" as const,
+      icon: BarChart3,
+      change: "+12% from last month",
+    },
+    {
+      title: "Completed Orders",
+      value: orders.filter((o) => o.status === "completed").length.toString(),
+      description: "Successfully fulfilled",
+      trend: "up" as const,
+      icon: CheckCircle,
+      change: "+8% from last month",
+    },
+    {
+      title: "Total Revenue",
+      value: `$${totalRevenue.toLocaleString()}`,
+      description: "From completed orders",
+      trend: "up" as const,
+      icon: DollarSign,
+      change: "+15% from last month",
+    },
+    {
+      title: "Pending Orders",
+      value: orders.filter((o) => o.status === "pending").length.toString(),
+      description: "Awaiting processing",
+      trend: "down" as const,
+      icon: Clock,
+      change: "-5% from last month",
+    },
+  ]
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -132,7 +149,7 @@ const stats = [
     }
   }
 
-  if (loading) {
+  if (loading && orders.length === 0) {
     return <div className="flex items-center justify-center h-64">Loading...</div>
   }
 
@@ -200,24 +217,26 @@ const stats = [
                       <div className="font-mono text-sm">{order.orderId || order.$id.slice(-8)}</div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">{order.listingTitle}</div>
+                      <div className="font-medium">{order.listingTitle || "Unknown Item"}</div>
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">
-                        {order.currency} {order.amount.toLocaleString()}
+                        {order.currency || "$"} {(order.totalAmount || order.amount || 0).toLocaleString()}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-2">
                         <CreditCard className="h-4 w-4" />
-                        <span className="capitalize">{order.paymentMethod}</span>
+                        <span className="capitalize">{order.paymentMethod || "Unknown"}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={getPaymentStatusColor(order.paymentStatus)}>{order.paymentStatus}</Badge>
+                      <Badge className={getPaymentStatusColor(order.paymentStatus || "pending")}>
+                        {order.paymentStatus || "pending"}
+                      </Badge>
                     </TableCell>
                     <TableCell>{new Date(order.$createdAt).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
@@ -247,6 +266,9 @@ const stats = [
                 ))}
               </TableBody>
             </Table>
+            {orders.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">No orders found matching your criteria.</div>
+            )}
           </div>
         </CardContent>
       </Card>

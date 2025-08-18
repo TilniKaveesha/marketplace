@@ -14,17 +14,17 @@ import { ListingActions } from "./ListingActions"
 interface Listing {
   $id: string
   title: string
-  displayTitle: string
+  displayTitle?: string
   description: string
   price: number
-  currency: string
+  currency?: string
   category: string
-  condition: string
+  condition?: string
   status: "active" | "pending" | "rejected" | "sold"
   images: string[]
   sellerName: string
   sellerId: string
-  shop: {
+  shop?: {
     ShopName: string
     userId: string
   }
@@ -32,9 +32,13 @@ interface Listing {
   $updatedAt: string
 }
 
-export function AdminListingsContent() {
-  const [listings, setListings] = useState<Listing[]>([])
-  const [loading, setLoading] = useState(true)
+interface AdminListingsContentProps {
+  initialListings: Listing[]
+}
+
+export function AdminListingsContent({ initialListings }: AdminListingsContentProps) {
+  const [listings, setListings] = useState<Listing[]>(initialListings)
+  const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [categoryFilter, setCategoryFilter] = useState("all")
@@ -56,8 +60,10 @@ export function AdminListingsContent() {
           ...listing,
           title: listing.displayTitle || listing.title || "Untitled",
           description: listing.description || "No description available",
-          sellerName: listing.shop?.ShopName || "Unknown Seller",
+          sellerName: listing.shop?.ShopName || listing.sellerName || "Unknown Seller",
           sellerId: listing.shop?.userId || listing.sellerId || "",
+          currency: listing.currency || "USD",
+          condition: listing.condition || "Used",
           $updatedAt: listing.$updatedAt || listing.$createdAt,
         }))
         setListings(transformedListings)
@@ -70,7 +76,10 @@ export function AdminListingsContent() {
   }
 
   useEffect(() => {
-    fetchListings()
+    const timeoutId = setTimeout(() => {
+      fetchListings()
+    }, 300)
+    return () => clearTimeout(timeoutId)
   }, [statusFilter, categoryFilter, searchTerm])
 
   const stats = [
@@ -124,7 +133,7 @@ export function AdminListingsContent() {
     }
   }
 
-  if (loading) {
+  if (loading && listings.length === 0) {
     return <div className="flex items-center justify-center h-64">Loading...</div>
   }
 
@@ -239,6 +248,9 @@ export function AdminListingsContent() {
                 ))}
               </TableBody>
             </Table>
+            {listings.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">No listings found matching your criteria.</div>
+            )}
           </div>
         </CardContent>
       </Card>
