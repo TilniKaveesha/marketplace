@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AdminStatsCard } from "./AdminStatsCard"
-import { fetchAdminAnalytics } from "@/lib/admin-actions"
+import { fetchAdminAnalytics } from "@/lib/admin-actions-client"
 import { DollarSign, ShoppingCart, Users, TrendingUp, Package, Eye } from "lucide-react"
 
 interface AnalyticsData {
@@ -63,7 +63,7 @@ export function AdminAnalyticsContent() {
   const revenueStats = [
     {
       title: "Total Revenue",
-      value: `$${analytics.revenue.total.toLocaleString()}`,
+      value: `$${(analytics.revenue?.total || 0).toLocaleString()}`,
       description: "Total platform revenue",
       icon: DollarSign,
       trend: "up" as const,
@@ -71,7 +71,7 @@ export function AdminAnalyticsContent() {
     },
     {
       title: "Total Orders",
-      value: analytics.revenue.orders.toString(),
+      value: (analytics.revenue?.orders || 0).toString(),
       description: "Orders processed",
       icon: ShoppingCart,
       trend: "up" as const,
@@ -79,7 +79,7 @@ export function AdminAnalyticsContent() {
     },
     {
       title: "Avg Order Value",
-      value: `$${analytics.revenue.avgOrderValue.toFixed(2)}`,
+      value: `$${(analytics.revenue?.avgOrderValue || 0).toFixed(2)}`,
       description: "Average order amount",
       icon: TrendingUp,
       trend: "up" as const,
@@ -87,7 +87,7 @@ export function AdminAnalyticsContent() {
     },
     {
       title: "Conversion Rate",
-      value: `${analytics.metrics.conversionRate.toFixed(1)}%`,
+      value: `${(analytics.metrics?.conversionRate || 0).toFixed(1)}%`,
       description: "Order completion rate",
       icon: TrendingUp,
       trend: "up" as const,
@@ -98,7 +98,7 @@ export function AdminAnalyticsContent() {
   const platformStats = [
     {
       title: "Total Listings",
-      value: analytics.listings.total.toString(),
+      value: (analytics.listings?.total || 0).toString(),
       description: "All platform listings",
       icon: Package,
       trend: "up" as const,
@@ -106,7 +106,7 @@ export function AdminAnalyticsContent() {
     },
     {
       title: "Active Listings",
-      value: analytics.listings.active.toString(),
+      value: (analytics.listings?.active || 0).toString(),
       description: "Currently visible",
       icon: Eye,
       trend: "up" as const,
@@ -114,7 +114,7 @@ export function AdminAnalyticsContent() {
     },
     {
       title: "New Users",
-      value: analytics.users.newUsers.toString(),
+      value: (analytics.users?.newUsers || 0).toString(),
       description: "User registrations",
       icon: Users,
       trend: "up" as const,
@@ -122,7 +122,7 @@ export function AdminAnalyticsContent() {
     },
     {
       title: "Pending Listings",
-      value: analytics.listings.pending.toString(),
+      value: (analytics.listings?.pending || 0).toString(),
       description: "Awaiting approval",
       icon: Package,
       trend: "down" as const,
@@ -190,15 +190,15 @@ export function AdminAnalyticsContent() {
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span>Completed Orders</span>
-                <span className="font-medium">{analytics.metrics.completedOrders}</span>
+                <span className="font-medium">{analytics.metrics?.completedOrders || 0}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span>Total Orders</span>
-                <span className="font-medium">{analytics.metrics.totalOrders}</span>
+                <span className="font-medium">{analytics.metrics?.totalOrders || 0}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span>Success Rate</span>
-                <span className="font-medium">{analytics.metrics.conversionRate.toFixed(1)}%</span>
+                <span className="font-medium">{(analytics.metrics?.conversionRate || 0).toFixed(1)}%</span>
               </div>
             </div>
           </CardContent>
@@ -212,16 +212,16 @@ export function AdminAnalyticsContent() {
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span>Active Listings</span>
-                <span className="font-medium">{analytics.listings.active}</span>
+                <span className="font-medium">{analytics.listings?.active || 0}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span>Pending Approval</span>
-                <span className="font-medium">{analytics.listings.pending}</span>
+                <span className="font-medium">{analytics.listings?.pending || 0}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span>Approval Rate</span>
                 <span className="font-medium">
-                  {((analytics.listings.active / analytics.listings.total) * 100).toFixed(1)}%
+                  {(((analytics.listings?.active || 0) / (analytics.listings?.total || 1)) * 100).toFixed(1)}%
                 </span>
               </div>
             </div>

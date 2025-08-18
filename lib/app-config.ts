@@ -1,4 +1,6 @@
 export const APP_CONFIG = {
+  BASE_URL: process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000",
+  
   APPWRITE: {
     KEY: process.env.NEXT_APPWRITE_KEY!,
     ENDPOINT: process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!,

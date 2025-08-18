@@ -1,13 +1,10 @@
+"use client"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { MoreHorizontal, Check, X, Pause } from 'lucide-react'
-import { updateShopStatus } from "@/lib/admin-actions"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { MoreHorizontal, Check, X, Pause } from "lucide-react"
+import { updateShopStatus } from "@/lib/admin-actions-client"
 import { toast } from "@/hooks/use-toast"
 
 interface Shop {

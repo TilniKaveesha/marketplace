@@ -1,20 +1,17 @@
+"use client"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { MoreHorizontal, UserCheck, UserX, Ban } from 'lucide-react'
-import { updateUserStatus } from "@/lib/admin-actions"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { MoreHorizontal, UserCheck, UserX, Ban } from "lucide-react"
+import { updateUserStatus } from "@/lib/admin-actions-client"
 import { toast } from "@/hooks/use-toast"
 
 interface User {
   $id: string
   name: string
   email: string
-  status: "active" | "suspended" | "banned"
+  status: "active" | "suspended"
   role: "user" | "seller" | "admin"
   $createdAt: string
   $updatedAt: string
@@ -28,7 +25,7 @@ interface UserActionsProps {
 export function UserActions({ user, onUpdate }: UserActionsProps) {
   const [loading, setLoading] = useState(false)
 
-  const handleStatusUpdate = async (status: "active" | "suspended" | "banned") => {
+  const handleStatusUpdate = async (status: "active" | "suspended") => {
     setLoading(true)
     try {
       const success = await updateUserStatus(user.$id, status)
@@ -74,12 +71,6 @@ export function UserActions({ user, onUpdate }: UserActionsProps) {
           <DropdownMenuItem onClick={() => handleStatusUpdate("suspended")}>
             <UserX className="mr-2 h-4 w-4" />
             Suspend
-          </DropdownMenuItem>
-        )}
-        {user.status !== "banned" && (
-          <DropdownMenuItem onClick={() => handleStatusUpdate("banned")}>
-            <Ban className="mr-2 h-4 w-4" />
-            Ban
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
