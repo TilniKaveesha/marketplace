@@ -6,8 +6,9 @@ interface AdminStatsCardProps {
   value: string
   description: string
   icon: LucideIcon
-  trend: "up" | "down"
+  trend: string | "up" | "down"
   change?: string
+  trendText?: string 
 }
 
 export function AdminStatsCard({
@@ -16,7 +17,8 @@ export function AdminStatsCard({
   description,
   icon: Icon,
   trend,
-  change
+  change,
+  trendText
 }: AdminStatsCardProps) {
   return (
     <Card>

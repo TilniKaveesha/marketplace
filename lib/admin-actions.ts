@@ -238,6 +238,65 @@ export async function getAllShops(limit = DEFAULT_LIMIT, offset = DEFAULT_OFFSET
   }
 }
 
+// Get analytics data
+export async function getAnalyticsData(period = "30d") {
+  const { databases } = await createAdminClient()
+
+  // Calculate date range based on period
+  const now = new Date()
+  const startDate = new Date()
+
+  switch (period) {
+    case "7d":
+      startDate.setDate(now.getDate() - 7)
+      break
+    case "30d":
+      startDate.setDate(now.getDate() - 30)
+      break
+    case "90d":
+      startDate.setDate(now.getDate() - 90)
+      break
+    case "1y":
+      startDate.setFullYear(now.getFullYear() - 1)
+      break
+    default:
+      startDate.setDate(now.getDate() - 30)
+  }
+
+  // Get total counts
+  const [users, shops, listings, orders] = await Promise.all([
+    databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.USER_ID, [Query.limit(1)]),
+    databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.SHOP_ID, [Query.limit(1)]),
+    databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.ITEM_LISTING_ID, [Query.limit(1)]),
+    databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID, [Query.limit(1)]),
+  ])
+
+  // Get recent orders for revenue calculation
+  const recentOrders = await databases.listDocuments(
+    APP_CONFIG.APPWRITE.DATABASE_ID,
+    APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
+    [
+      Query.greaterThanEqual("$createdAt", startDate.toISOString()),
+      Query.equal("paymentStatus", "completed"),
+      Query.limit(1000),
+    ],
+  )
+
+  const totalRevenue = recentOrders.documents.reduce((sum, order) => {
+    return sum + (Number(order.amount) || 0)
+  }, 0)
+
+  return {
+    totalUsers: users.total,
+    totalShops: shops.total,
+    totalListings: listings.total,
+    totalOrders: orders.total,
+    totalRevenue,
+    period,
+    recentOrders: recentOrders.documents.slice(0, 10),
+  }
+}
+
 // Get all listings
 export async function getAllListings(limit = DEFAULT_LIMIT, offset = DEFAULT_OFFSET): Promise<Listing[]> {
   try {
@@ -357,5 +416,153 @@ export async function updateListingStatus(listingId: string, status: Listing["st
   } catch (error) {
     console.error("Failed to update listing status:", error)
     throw error
+  }
+}
+
+// Generate reports
+export async function generateReport(type: string, startDate: string, endDate: string, format = "json") {
+  const { databases } = await createAdminClient()
+
+  const queries: any[] = [Query.limit(1000)]
+
+  if (startDate) {
+    queries.push(Query.greaterThanEqual("$createdAt", startDate))
+  }
+
+  if (endDate) {
+    queries.push(Query.lessThanEqual("$createdAt", endDate))
+  }
+
+  let data: any
+
+  switch (type) {
+    case "sales":
+      const orders = await databases.listDocuments(
+        APP_CONFIG.APPWRITE.DATABASE_ID,
+        APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
+        [...queries, Query.equal("paymentStatus", "completed")],
+      )
+      data = orders.documents
+      break
+
+    case "users":
+      const users = await databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.USER_ID, queries)
+      data = users.documents
+      break
+
+    case "inventory":
+      const listings = await databases.listDocuments(
+        APP_CONFIG.APPWRITE.DATABASE_ID,
+        APP_CONFIG.APPWRITE.ITEM_LISTING_ID,
+        queries,
+      )
+      data = listings.documents
+      break
+
+    default:
+      // Overview report
+      const [allUsers, allShops, allListings, allOrders] = await Promise.all([
+        databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.USER_ID, [Query.limit(100)]),
+        databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.SHOP_ID, [Query.limit(100)]),
+        databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.ITEM_LISTING_ID, [
+          Query.limit(100),
+        ]),
+        databases.listDocuments(APP_CONFIG.APPWRITE.DATABASE_ID, APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID, [
+          Query.limit(100),
+        ]),
+      ])
+
+      data = {
+        users: allUsers.total,
+        shops: allShops.total,
+        listings: allListings.total,
+        orders: allOrders.total,
+        summary: {
+          totalUsers: allUsers.total,
+          totalShops: allShops.total,
+          totalListings: allListings.total,
+          totalOrders: allOrders.total,
+        },
+      }
+  }
+
+  if (format === "csv") {
+    // Convert to CSV format
+    if (Array.isArray(data) && data.length > 0) {
+      const headers = Object.keys(data[0]).join(",")
+      const rows = data.map((item) => Object.values(item).join(",")).join("\n")
+      return `${headers}\n${rows}`
+    }
+    return "No data available"
+  }
+
+  return data
+}
+// Get admin settings
+export async function getAdminSettings() {
+  // This would typically come from a settings collection
+  // For now, return default settings
+  return {
+    platform: {
+      siteName: "MarketPlace Master",
+      currency: "USD",
+      timezone: "UTC",
+      maintenanceMode: false,
+    },
+    payment: {
+      commissionRate: 5,
+      payoutSchedule: "weekly",
+      minimumPayout: 50,
+    },
+    security: {
+      twoFactorRequired: false,
+      passwordMinLength: 8,
+      sessionTimeout: 24,
+    },
+  }
+}
+
+// Update admin settings
+export async function updateAdminSettings(category: string, settings: any) {
+  // This would typically update a settings collection
+  // For now, just return the updated settings
+  console.log(`Updating ${category} settings:`, settings)
+  return settings
+}
+
+// Update order status
+export async function updateOrderStatus(orderId: string, status?: string, paymentStatus?: string) {
+  const { databases } = await createAdminClient()
+
+  const updateData: any = {
+    updatedAt: new Date().toISOString(),
+  }
+
+  if (status) {
+    updateData.status = status
+  }
+
+  if (paymentStatus) {
+    updateData.paymentStatus = paymentStatus
+  }
+
+  const updatedOrder = await databases.updateDocument(
+    APP_CONFIG.APPWRITE.DATABASE_ID,
+    APP_CONFIG.APPWRITE.ODERS_COLLECTION_ID,
+    orderId,
+    updateData,
+  )
+
+  return updatedOrder
+}
+
+export async function fetchAdminAnalytics(period = "30d") {
+  try {
+    const response = await fetch(`/api/admin/analytics?period=${period}`)
+    const data = await response.json()
+    return data.success ? data.data : null
+  } catch (error) {
+    console.error("Error fetching analytics:", error)
+    return null
   }
 }
